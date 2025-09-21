@@ -1,0 +1,21 @@
+{
+    "interactive": [
+        "accountAddPortForward"                                  , {"ac" : ["--account"]},
+        "accountAddPortForward +--account"                       , {"ac" : ["<ACCOUNT>"]},
+        "accountAddPortForward +--account +\\S+"                 , {"ac" : ["--host"]},
+        "accountAddPortForward +--account +\\S+ +--host"     , {"pr" : ["<HOST>", "<IP>", "<IP/MASK>"]},
+        "accountAddPortForward +--account +\\S+ +--host +\\S+"                              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port"]},
+        "accountAddPortForward +--account +\\S+ +--host +\\S+ +.*--remote-user"             , {"pr" : ["<USER>"]},
+        "accountAddPortForward +--account +\\S+ +--host +\\S+ +.*--ssh-port"                , {"pr" : ["<PORT>"]},
+        "accountAddPortForward +--account +\\S+ +--host +\\S+ +.*--forward-port"            , {"pr" : ["<PORT>"]},
+        "accountAddPortForward +--account +\\S+ +--host +\\S+ +--(remote-user|ssh-port|forward-port) +\\S+"                              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--ttl", "--comment", "--force-key", "--force-password"]},
+        "accountAddPortForward +--account +\\S+ +--host +\\S+ +--(remote-user|ssh-port|forward-port) +\\S+ +--(remote-user|ssh-port|forward-port) +\\S+"                              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--ttl", "--comment", "--force-key", "--force-password"]},
+        "accountAddPortForward +--account +\\S+ +--remote-host +\\S+ +.*--ttl"                     , {"pr" : ["<SECONDS>", "<DURATION>"]},
+        "accountAddPortForward +--account +\\S+ +--remote-host +\\S+ +.*--comment"                 , {"pr" : ["<COMMENT>"]},
+        "accountAddPortForward +--account +\\S+ +--remote-host +\\S+ +.*--force-key"               , {"pr" : ["<FINGERPRINT>"]},
+        "accountAddPortForward +--account +\\S+ +--remote-host +\\S+ +.*--force-password"          , {"pr" : ["<HASH>"]},
+        "accountAddPortForward +--account +\\S+ +--remote-host +\\S+ +.*--(ttl|comment|force-key|force-password) +\\S+"              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--ttl", "--comment", "--force-key", "--force-password"]},
+        "accountAddPortForward +--account +\\S+ +--remote-host +\\S+ +.*--(ttl|comment|force-key|force-password) +\\S+ +--(remote-user|ssh-port|forward-port|ttl|comment|force-key|force-password) +\\S+" , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--ttl", "--comment", "--force-key", "--force-password"]}
+    ],
+    "master_only": true
+}

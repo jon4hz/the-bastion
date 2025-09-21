@@ -1,0 +1,111 @@
+#! /usr/bin/env perl
+# vim: set filetype=perl ts=4 sw=4 sts=4 et:
+use common::sense;
+
+use File::Basename;
+use lib dirname(__FILE__) . '/../../../lib/perl';
+use OVH::Result;
+use OVH::Bastion;
+use OVH::Bastion::Plugin qw( :DEFAULT help );
+use OVH::Bastion::Plugin::ACL;
+
+my $remainingOptions = OVH::Bastion::Plugin::begin(
+    argv               => \@ARGV,
+    header             => "remove port forwarding access from an account to a group server",
+    userAllowWildcards => 1,
+    options            => {
+        "account=s"          => \my $account,
+        "group=s"            => \my $group,
+        "remote-user=s"      => \my $remoteUser,
+        "ssh-port=s"         => \my $sshPort,
+        "forward-port=s"     => \my $forwardPort,
+    },
+    helptext => <<'EOF',
+Remove port forwarding access from an account to a group server
+
+Usage: --osh SCRIPT_NAME --account ACCOUNT --group GROUP --host HOST|IP [OPTIONS]
+
+  --account ACCOUNT        Bastion account to remove port forwarding access from
+  --group GROUP            Group to remove port forwarding access from
+  --host HOST|IP           Specify the remote host to remove port forwarding access to
+  --ssh-port PORT          SSH server port on the remote host [22]
+  --forward-port PORT      Port on remote host to forward through the tunnel [*]
+  --remote-user USER       Specify the remote user to remove forwarding access for [any user]
+
+This command removes port forwarding access from an account for servers in a group's port forwarding list.
+This prevents the account from creating port forwarding tunnels to the specified remote host
+using the group's credentials.
+
+Examples:
+  --osh groupDelGuestPortForward --account john --group mygroup --host 192.168.1.10 --forward-port 80
+  --osh groupDelGuestPortForward --account jane --group devs --host db.example.com --remote-user mysql
+EOF
+);
+
+my $fnret;
+
+if (not $account) {
+    help();
+    osh_exit 'ERR_MISSING_PARAMETER', "Missing mandatory parameter 'account'";
+}
+
+if (not $group) {
+    help();
+    osh_exit 'ERR_MISSING_PARAMETER', "Missing mandatory parameter 'group'";
+}
+
+if (not $ip) {
+    help();
+    osh_exit 'ERR_MISSING_PARAMETER', "Missing mandatory parameter 'host' or didn't resolve correctly";
+}
+
+$fnret = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);
+$fnret or osh_exit $fnret;
+$account = $fnret->value->{'account'};
+
+$fnret = OVH::Bastion::is_valid_group_and_existing(group => $group, groupType => "key");
+$fnret or osh_exit $fnret;
+
+# get returned untainted value
+$group = $fnret->value->{'group'};
+my $shortGroup = $fnret->value->{'shortGroup'};
+
+$fnret = OVH::Bastion::is_group_gatekeeper(account => $self, group => $shortGroup, sudo => 1);
+$fnret or osh_exit('ERR_NOT_GROUP_GATEKEEPER', "You must be a gatekeeper of group $shortGroup");
+
+$fnret = OVH::Bastion::Plugin::ACL::check_portforward(
+    remoteUser   => $remoteUser,
+    sshPort      => $sshPort,
+    forwardPort  => $forwardPort,
+);
+if (not $fnret) {
+    help();
+    osh_exit($fnret);
+}
+$remoteUser  = $fnret->value->{'remoteUser'};
+$sshPort     = $fnret->value->{'sshPort'};
+$forwardPort = $fnret->value->{'forwardPort'};
+
+# Check if port forwarding is enabled in configuration
+my $fnret = OVH::Bastion::load_configuration();
+if (!$fnret) {
+    osh_exit 'ERR_CONFIGURATION', "Failed to load configuration";
+}
+my $config = $fnret->value;
+if (!$config->{'portForwardingEnabled'}) {
+    osh_exit 'ERR_FORBIDDEN', "Port forwarding feature is disabled on this bastion";
+}
+
+osh_info "Removing port forward access to $ip:" . ($sshPort || '*') . "->" . ($forwardPort || '*') . " (" . ($remoteUser || '*') . ") from account $account for group $shortGroup...";
+
+my @command = qw{ sudo -n -u allowkeeper -- /usr/bin/env perl -T };
+push @command, $OVH::Bastion::BASEPATH . '/bin/helper/osh-accountAddGroupPortForward';
+push @command, '--group',          $group;
+push @command, '--action',         'del';
+push @command, '--account',        $account;
+push @command, '--remote-ip',      $ip;
+push @command, '--remote-user',    $remoteUser  if $remoteUser;
+push @command, '--ssh-port',       $sshPort     if $sshPort;
+push @command, '--forward-port',   $forwardPort if $forwardPort;
+
+osh_exit OVH::Bastion::helper(cmd => \@command);

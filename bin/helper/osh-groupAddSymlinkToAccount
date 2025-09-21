@@ -1,6 +1,6 @@
 #! /usr/bin/perl -T
 # vim: set filetype=perl ts=4 sw=4 sts=4 et:
-# KEYSUDOERS # as a gatekeeper, to be able to symlink in /home/allowkeeper/ACCOUNT the /home/%GROUP%/allowed.ip file
+# KEYSUDOERS # as a gatekeeper, to be able to symlink in /home/allowkeeper/ACCOUNT the /home/%GROUP%/allowed.ip and allowed.forward files
 # KEYSUDOERS SUPEROWNERS, %%GROUP%-gatekeeper ALL=(allowkeeper) NOPASSWD: /usr/bin/env perl -T %BASEPATH%/bin/helper/osh-groupAddSymlinkToAccount --group %GROUP% *
 # FILEMODE 0750
 # FILEOWN 0 allowkeeper
@@ -91,45 +91,73 @@ osh_debug("user -gatek or gatek");
 #>CODE
 my $msg;
 my $prefix = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
-my $link   = "/home/allowkeeper/$sysaccount/$prefix.ip.$shortGroup";
-if ($action eq 'del') {
-    osh_debug("Going to remove symlink");
-    if (-l $link || -e _) {
-        if (unlink $link) {
-            $msg = "Successfully removed $link";
-        }
-        else {
-            warn_syslog("$0: error while trying to remove symlink $link ($!)");
-            HEXIT('ERR_UNLINK_FAILED', msg => "Error while trying to remove symlink");
-        }
-    }
-    else {
-        HEXIT('OK_NO_CHANGE', msg => "Symlink was not existing as $link, nothing to do");
-    }
-}
-elsif ($action eq 'add') {
-    my $source = "/home/$group/allowed.ip";
-    osh_debug("symlinking $source to $link");
 
-    if (not -e $source) {
-        HEXIT('ERR_SOURCE_NOT_FOUND', msg => "Cannot create symlink as $source doesn't exist");
-    }
-    elsif (-e $link) {
-        HEXIT('OK_NO_CHANGE', msg => "Symlink $link is already there, nothing to do");
-    }
-    else {
-        if (symlink($source, $link)) {
-            $msg = "Account $account now has full access to $shortGroup servers";
+# Handle both IP and port forwarding symlinks
+my @file_types = ('ip', 'forward');
+my @results;
+my $any_changes = 0;
+
+foreach my $type (@file_types) {
+    my $link = "/home/allowkeeper/$sysaccount/$prefix.$type.$shortGroup";
+    my $source = "/home/$group/allowed.$type";
+    
+    if ($action eq 'del') {
+        osh_debug("Going to remove $type symlink: $link");
+        if (-l $link || -e _) {
+            if (unlink $link) {
+                push @results, "Successfully removed $type symlink: $link";
+                $any_changes = 1;
+            }
+            else {
+                warn_syslog("$0: error while trying to remove $type symlink $link ($!)");
+                HEXIT('ERR_UNLINK_FAILED', msg => "Error while trying to remove $type symlink");
+            }
         }
         else {
-            warn_syslog("$0: error while creating symlink $source to $link ($!)");
-            HEXIT('ERR_SYMLINK_FAILED', msg => "Error while creating symlink");
+            push @results, "$type symlink was not existing as $link, nothing to do";
         }
     }
+    elsif ($action eq 'add') {
+        osh_debug("Attempting to create $type symlink from $source to $link");
+
+        if (not -e $source) {
+            push @results, "Cannot create $type symlink as $source doesn't exist";
+        }
+        elsif (-e $link) {
+            push @results, "$type symlink $link is already there, nothing to do";
+        }
+        else {
+            if (symlink($source, $link)) {
+                if ($type eq 'ip') {
+                    push @results, "Account $account now has SSH access to $shortGroup servers";
+                }
+                elsif ($type eq 'forward') {
+                    push @results, "Account $account now has port forwarding access to $shortGroup destinations";
+                }
+                $any_changes = 1;
+            }
+            else {
+                warn_syslog("$0: error while creating $type symlink $source to $link ($!)");
+                HEXIT('ERR_SYMLINK_FAILED', msg => "Error while creating $type symlink");
+            }
+        }
+    }
+    else {
+        warn_syslog("$0: unreachable code has been reached");
+        HEXIT('ERR_INTERNAL');    # unreachable
+    }
 }
-else {
-    warn_syslog("$0: unreachable code has been reached");
-    HEXIT('ERR_INTERNAL');    # unreachable
+
+# Create the final message and determine exit code
+if (@results) {
+    $msg = join("\n", @results);
 }
+
+# If no changes were made, return OK_NO_CHANGE
+if (!$any_changes) {
+    HEXIT('OK_NO_CHANGE', msg => $msg);
+}
+
+
 
 HEXIT("OK", msg => $msg);

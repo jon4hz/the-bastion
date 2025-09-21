@@ -1,0 +1,6 @@
+{
+    "interactive": [
+        "selfListPortForward"                                           , {"ac" : ["<enter>", "--reverse-dns"]},
+        "selfListPortForward +--reverse-dns"                           , {"pr" : ["<enter>"]}
+    ]
+}

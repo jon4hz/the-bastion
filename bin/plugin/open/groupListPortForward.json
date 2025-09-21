@@ -1,0 +1,8 @@
+{
+    "interactive": [
+        "groupListPortForward"                               , {"ac" : ["--group"]},
+        "groupListPortForward +--group"                      , {"ac" : ["<GROUP>"]},
+        "groupListPortForward +--group +\\S+"                , {"ac" : ["<enter>", "--reverse-dns"]},
+        "groupListPortForward +--group +\\S+ +--reverse-dns" , {"pr" : ["<enter>"]}
+    ]
+}

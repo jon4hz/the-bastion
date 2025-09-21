@@ -1,0 +1,74 @@
+#! /usr/bin/env perl
+# vim: set filetype=perl ts=4 sw=4 sts=4 et:
+use common::sense;
+
+use File::Basename;
+use lib dirname(__FILE__) . '/../../../lib/perl';
+use OVH::Result;
+use OVH::Bastion;
+use OVH::Bastion::Plugin qw( :DEFAULT help );
+
+# globally allow sys_getpw* and sys_getgr* cache use
+$ENV{'PW_GR_CACHE'} = 1;
+
+my $remainingOptions = OVH::Bastion::Plugin::begin(
+    argv    => \@ARGV,
+    header  => "list port forwarding accesses of an account",
+    options => {
+        "account=s"   => \my $account,
+        "reverse-dns" => \my $reverse,
+        "include=s"   => \my @includes,
+        "exclude=s"   => \my @excludes,
+    },
+    helptext => <<'EOF',
+List the port forwarding accesses of a bastion account
+
+Usage: --osh SCRIPT_NAME --account ACCOUNT [--reverse-dns]
+
+  --account ACCOUNT  The bastion account to list port forwarding accesses for
+  --reverse-dns      Attempt to resolve the reverse hostnames (SLOW!)
+  --include PATTERN  Only include accesses matching the given PATTERN (see below)
+                        This option can be used multiple times to refine results
+  --exclude PATTERN  Omit accesses matching the given PATTERN (see below)
+                        This option can be used multiple times.
+                        Note that --exclude takes precedence over --include
+
+**Note:** PATTERN supports the ``*`` and ``?`` wildcards.
+If PATTERN is a simple string without wildcards, then names containing this string will be considered.
+The matching is done on the text output of the command.
+EOF
+);
+
+my $fnret;
+
+if (!$account) {
+    help();
+    osh_exit 'ERR_MISSING_PARAMETER', "Missing parameter 'account'";
+}
+
+$fnret = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);
+$fnret or osh_exit $fnret;
+
+# get returned untainted value
+$account = $fnret->value->{'account'};
+
+if (!OVH::Bastion::is_admin(account => $self, sudo => 1)) {
+    osh_exit 'ERR_ACCESS_DENIED', "You must be an admin to list another account's port forwarding accesses";
+}
+
+$fnret = OVH::Bastion::get_portforward_acls(account => $account);
+$fnret or osh_exit $fnret;
+
+if (not @{$fnret->value}) {
+    osh_ok R('OK_EMPTY', msg => "Account $account has no registered port forwarding accesses through this bastion");
+}
+
+osh_info "Account $account has the following port forwarding accesses:\n";
+
+OVH::Bastion::print_portforward_acls(
+    acls     => $fnret->value,
+    reverse  => $reverse,
+    includes => \@includes,
+    excludes => \@excludes
+);
+osh_ok($fnret);

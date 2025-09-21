@@ -31,8 +31,14 @@ SUPEROWNERS, %%GROUP%-gatekeeper ALL=(root)        NOPASSWD: /usr/bin/env perl -
 # as a gatekeeper, to be able to add the servers to /home/allowkeeper/ACCOUNT/allowed.partial.%GROUP% file
 SUPEROWNERS, %%GROUP%-gatekeeper ALL=(allowkeeper) NOPASSWD: /usr/bin/env perl -T %BASEPATH%/bin/helper/osh-accountAddGroupServer --group %GROUP% *
 
+# as a gatekeeper, to be able to add the port forward accesses to /home/allowkeeper/ACCOUNT/allowed.partial.%GROUP%.forward file
+SUPEROWNERS, %%GROUP%-gatekeeper ALL=(allowkeeper) NOPASSWD: /usr/bin/env perl -T %BASEPATH%/bin/helper/osh-accountAddGroupPortForward --group %GROUP% *
+
 # as an aclkeeper, we can add/del a server from the group server list in /home/%GROUP%/allowed.ip
 SUPEROWNERS, %%GROUP%-aclkeeper  ALL=(%GROUP%)     NOPASSWD: /usr/bin/env perl -T %BASEPATH%/bin/helper/osh-groupAddServer --group %GROUP% *
+
+# as an aclkeeper, we can add/del a server from the group port forward list in /home/%GROUP%/allowed.forward
+SUPEROWNERS, %%GROUP%-aclkeeper  ALL=(%GROUP%)     NOPASSWD: /usr/bin/env perl -T %BASEPATH%/bin/helper/osh-groupAddPortForward --group %GROUP% *
 
 # as an aclkeeper, we can replace the group servers list in /home/%GROUP%/allowed.ip in batch with one command
 SUPEROWNERS, %%GROUP%-aclkeeper  ALL=(%GROUP%)     NOPASSWD: /usr/bin/env perl -T %BASEPATH%/bin/helper/osh-groupSetServers --group %GROUP%

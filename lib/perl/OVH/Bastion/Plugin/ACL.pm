@@ -91,4 +91,59 @@ sub check {
     return R('OK', value => {user => $user, port => $port, protocol => $protocol});
 }
 
+sub check_portforward {
+    my %params = @_;
+    my ($remoteUser, $sshPort, $forwardPort) = @params{qw{ remoteUser sshPort forwardPort }};
+
+    # Remote user validation - optional, can be undef (any user) or a specific user
+    if (defined $remoteUser && $remoteUser ne '') {
+        # Allow '*' as wildcard for any user
+        if ($remoteUser eq '*') {
+            undef $remoteUser;
+        }
+        else {
+            # Validate remote user format
+            my $fnret = OVH::Bastion::is_valid_remote_user(user => $remoteUser, allowWildcards => 1);
+            if (!$fnret) {
+                return R('ERR_INVALID_PARAMETER', msg => "Invalid remote user '$remoteUser': " . $fnret->msg);
+            }
+            $remoteUser = $fnret->value;
+        }
+    }
+
+    # SSH port validation - optional, defaults to 22
+    if (defined $sshPort && $sshPort ne '') {
+        if ($sshPort eq '*') {
+            undef $sshPort;  # Allow any SSH port
+        }
+        else {
+            my $fnret = OVH::Bastion::is_valid_port(port => $sshPort);
+            if (!$fnret) {
+                return R('ERR_INVALID_PARAMETER', msg => "Invalid SSH port '$sshPort': " . $fnret->msg);
+            }
+            $sshPort = $fnret->value;
+        }
+    }
+
+    # Forward port validation - optional, can be any port
+    if (defined $forwardPort && $forwardPort ne '') {
+        if ($forwardPort eq '*') {
+            undef $forwardPort;  # Allow any forward port
+        }
+        else {
+            my $fnret = OVH::Bastion::is_valid_port(port => $forwardPort);
+            if (!$fnret) {
+                return R('ERR_INVALID_PARAMETER', msg => "Invalid forward port '$forwardPort': " . $fnret->msg);
+            }
+            $forwardPort = $fnret->value;
+        }
+    }
+
+    return R('OK', value => {
+        remoteUser   => $remoteUser,
+        sshPort      => $sshPort,
+        forwardPort  => $forwardPort
+    });
+}
+
 1;

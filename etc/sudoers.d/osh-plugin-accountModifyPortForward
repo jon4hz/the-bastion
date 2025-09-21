@@ -1,0 +1,4 @@
+%osh-selfAddPortForward    ALL=(allowkeeper) NOPASSWD:/usr/bin/env perl -T /opt/bastion/bin/helper/osh-accountModifyPortForward --target self --action add *
+%osh-accountAddPortForward ALL=(allowkeeper) NOPASSWD:/usr/bin/env perl -T /opt/bastion/bin/helper/osh-accountModifyPortForward --target any --action add *
+%osh-selfDelPortForward    ALL=(allowkeeper) NOPASSWD:/usr/bin/env perl -T /opt/bastion/bin/helper/osh-accountModifyPortForward --target self --action del *
+%osh-accountDelPortForward ALL=(allowkeeper) NOPASSWD:/usr/bin/env perl -T /opt/bastion/bin/helper/osh-accountModifyPortForward --target any --action del *
