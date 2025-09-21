@@ -79,6 +79,9 @@ if ($r->{user} || $r->{ipto} || $r->{portto} || $r->{hostto}) {
 }
 osh_info sprintf "%8s: %s\n", "RetCode", $r->{returnvalue} // 'n/a';
 osh_info sprintf "%8s: %s\n", "Params",  $r->{params}      // "''";
+if ($r->{comment}) {
+    osh_info sprintf "%8s: %s\n", "Comment", $r->{comment};
+}
 osh_info "\n";
 
 my $ttyrecfile = $r->{'ttyrecfile'};
