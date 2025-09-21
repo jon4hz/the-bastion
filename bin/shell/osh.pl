@@ -382,6 +382,7 @@ my $remainingOptions;
     "generate-mfa-token"        => \my $generateMfaToken,
     "mfa-token=s"               => \my $mfaToken,
     "term-passthrough"          => \my $termPassthrough,
+    "L=s@"                      => \my $localForwards,           # SSH local port forwarding
 );
 if (not defined $realOptions) {
     help();
@@ -661,6 +662,160 @@ if (!$fnret && (($osh_command && $host) || !$osh_command)) {
 if ($fnret) {
     $ip = $fnret->value->{'ip'};
     osh_debug("will work on IP $ip");
+}
+
+# Handle port forwarding requests
+my @validatedForwards;
+if ($localForwards && @$localForwards) {
+    # Check if port forwarding is globally enabled
+    my $config = OVH::Bastion::load_configuration()->value;
+    if (!$config->{'portForwardingEnabled'}) {
+        main_exit(OVH::Bastion::EXIT_ACCESS_DENIED, 'port_forwarding_disabled', 
+                  "Port forwarding feature is disabled on this bastion");
+    }
+    
+    # Check that we have a host to connect to
+    if (!$ip) {
+        main_exit(OVH::Bastion::EXIT_NO_HOST, 'missing_host_for_port_forward',
+                  "Port forwarding requires a destination host");
+    }
+    
+    # Parse and validate each port forwarding request
+    foreach my $forward (@$localForwards) {
+        osh_debug("Processing port forward: $forward");
+        
+        # Parse format: [local_bind:]local_port:remote_host:remote_port
+        # For bastion use, we expect: local_port:remote_host:remote_port
+        # Local bind is always localhost for security
+        my ($local_port, $remote_host, $remote_port);
+        
+        if ($forward =~ /^(\d+):([^:]+):(\d+)$/) {
+            $local_port = $1;
+            $remote_host = $2;
+            $remote_port = $3;
+        }
+        elsif ($forward =~ /^localhost:(\d+):([^:]+):(\d+)$/ || $forward =~ /^127\.0\.0\.1:(\d+):([^:]+):(\d+)$/) {
+            $local_port = $1;
+            $remote_host = $2;
+            $remote_port = $3;
+        }
+        else {
+            main_exit(OVH::Bastion::EXIT_GETOPTS_FAILED, 'invalid_port_forward_format',
+                      "Invalid port forward format '$forward'. Expected: local_port:remote_host:remote_port");
+        }
+        
+        # Validate ports
+        if ($local_port < 1 || $local_port > 65535 || $remote_port < 1 || $remote_port > 65535) {
+            main_exit(OVH::Bastion::EXIT_GETOPTS_FAILED, 'invalid_port_forward_ports',
+                      "Invalid port numbers in '$forward'. Ports must be 1-65535");
+        }
+        
+        # Resolve remote_host to IP if needed
+        my $remote_ip;
+        if ($remote_host =~ /^(\d{1,3}\.){3}\d{1,3}$/ || $remote_host =~ /:/) {
+            # Already an IP address
+            $remote_ip = $remote_host;
+        }
+        else {
+            # Resolve hostname
+            my $resolve_fnret = OVH::Bastion::get_ip(host => $remote_host);
+            if (!$resolve_fnret) {
+                main_exit(OVH::Bastion::EXIT_HOST_NOT_FOUND, 'port_forward_host_not_found',
+                          "Cannot resolve remote host '$remote_host' for port forwarding: " . $resolve_fnret->msg);
+            }
+            $remote_ip = $resolve_fnret->value->{'ip'};
+        }
+        
+        # The user we're checking access for (may be different from connection user)
+        my $forward_user = $user;
+        
+        # Check if the user has port forwarding access to this destination
+        osh_debug("Checking port forward access for $self to $remote_ip:$port->$remote_port as user " . ($forward_user || '*'));
+        
+        my $pf_access_fnret = OVH::Bastion::get_portforward_acls(account => $self);
+        if (!$pf_access_fnret || !@{$pf_access_fnret->value}) {
+            main_exit(OVH::Bastion::EXIT_ACCESS_DENIED, 'no_port_forward_access',
+                      "No port forwarding access configured for account $self");
+        }
+        
+        # Check if there's a matching port forwarding rule
+        my $found_matching_rule = 0;
+        foreach my $contextAcl (@{$pf_access_fnret->value}) {
+            foreach my $entry (@{$contextAcl->{acl} || []}) {
+                # Check if this rule matches our request
+                my $rule_matches = 1;
+                
+                # Check local port (ingress port on bastion)
+                if (defined $entry->{local_port} && $entry->{local_port} ne $local_port) {
+                    $rule_matches = 0;
+                }
+                
+                # Check remote IP
+                if ($entry->{remote_ip} ne $remote_ip) {
+                    $rule_matches = 0;
+                }
+                
+                # Check SSH port (port to connect to the bastion target)
+                if (defined $entry->{ssh_port} && $entry->{ssh_port} ne $port) {
+                    $rule_matches = 0;
+                }
+                
+                # Check forward port (service port we're forwarding to)
+                if (defined $entry->{forward_port} && $entry->{forward_port} ne $remote_port) {
+                    $rule_matches = 0;
+                }
+                
+                # Check remote user
+                if (defined $entry->{remote_user} && defined $forward_user && $entry->{remote_user} ne $forward_user) {
+                    $rule_matches = 0;
+                }
+                
+                if ($rule_matches) {
+                    $found_matching_rule = 1;
+                    osh_debug("Found matching port forward rule: " . $entry->{rule_id});
+                    last;
+                }
+            }
+            last if $found_matching_rule;
+        }
+        
+        if (!$found_matching_rule) {
+            my $machine = OVH::Bastion::machine_display(ip => $remote_ip, port => $remote_port, user => $forward_user)->value;
+            main_exit(OVH::Bastion::EXIT_ACCESS_DENIED, 'port_forward_access_denied',
+                      "No port forwarding rule found for local port $local_port to $machine for account $self. Use --osh selfListPortForward to see available port forwards.");
+        }
+        
+        # Verify that the user also has SSH access to the destination
+        osh_debug("Verifying SSH access to destination $remote_ip:$port as user " . ($forward_user || '*'));
+        my $ssh_access_fnret = OVH::Bastion::is_access_granted(
+            account => $self,
+            ip      => $remote_ip,
+            port    => $port,
+            user    => $forward_user,
+            ipfrom  => $ipfrom,
+        );
+        
+        if (!$ssh_access_fnret) {
+            my $machine = OVH::Bastion::machine_display(ip => $remote_ip, port => $port, user => $forward_user)->value;
+            main_exit(OVH::Bastion::EXIT_ACCESS_DENIED, 'ssh_access_required_for_port_forward',
+                      "SSH access to $machine is required for port forwarding");
+        }
+        
+        # Store validated forward
+        push @validatedForwards, {
+            local_port => $local_port,
+            remote_ip  => $remote_ip,
+            remote_port => $remote_port,
+            original   => $forward
+        };
+        
+        osh_debug("Port forward validated: localhost:$local_port -> $remote_ip:$remote_port");
+    }
+    
+    # Force no-TTY mode for port forwarding as per SSH standard
+    $notty = 1;
+    
+    osh_info("Port forwarding enabled: " . join(', ', map { "localhost:$_->{local_port} -> $_->{remote_ip}:$_->{remote_port}" } @validatedForwards));
 }
 
 # Check if we got a telnet or ssh password user
@@ -1494,6 +1649,19 @@ else {
     if ($config->{'sshAddKeysToAgentAllowed'} && $sshAddKeysToAgent) {
         push @command, '-A', '-o', 'AddKeysToAgent=yes';
     }
+    
+    # Add port forwarding arguments if validated
+    if (@validatedForwards) {
+        foreach my $forward (@validatedForwards) {
+            push @command, '-L', "127.0.0.1:$forward->{local_port}:$forward->{remote_ip}:$forward->{remote_port}";
+            osh_debug("Added port forward: -L 127.0.0.1:$forward->{local_port}:$forward->{remote_ip}:$forward->{remote_port}");
+        }
+        
+        # Force no shell when port forwarding
+        # push @command, '-N';
+        # osh_debug("Added -N flag for port forwarding (no shell)");
+    }
+    
     push @command, '-o', 'PreferredAuthentications=' . (join(',', @preferredAuths));
 
     if ($config->{'sshClientHasOptionE'}) {
@@ -1577,7 +1745,7 @@ if ($wait) {
 
 my $logret = OVH::Bastion::log_access_insert(
     account     => $self,
-    cmdtype     => $telnet ? 'telnet' : 'ssh',
+    cmdtype     => $telnet ? 'telnet' : (@validatedForwards ? 'ssh-portforward' : 'ssh'),
     allowed     => 1,
     ipfrom      => $ipfrom,
     hostfrom    => $hostfrom,
@@ -1591,6 +1759,7 @@ my $logret = OVH::Bastion::log_access_insert(
     user        => $user,
     params      => join(' ', @ttyrec),
     ttyrecfile  => $saveFile,
+    comment     => @validatedForwards ? "Port forwards: " . join(',', map { "$_->{local_port}:$_->{remote_ip}:$_->{remote_port}" } @validatedForwards) : undef,
     uniqid      => $log_uniq_id
 );
 if (!$logret) {
@@ -2080,6 +2249,7 @@ Usage (osh cmd): $bastionName --osh [OSH_COMMAND] [OSH_OPTIONS]
     --telnet,  -e        Use telnet instead of ssh
     --timeout     DELAY  Specify a timeout for ssh or telnet egress connection
     --bind        IP     Force binding of the egress ssh connection to a specified local IP
+    -L            SPEC   Create port forwarding tunnel(s), use ssh syntax: [local_port]:remote_host:remote_port
     --password    GROUP  Use a group egress password instead of ssh keys to login (via ssh or telnet)
     --self-password, -P  Use your own personal account egress password instead of ssh keys to login (via ssh or telnet)
     --osh                Use an osh command (see --osh help to get a list)
