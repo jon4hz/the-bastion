@@ -1,0 +1,8 @@
+{
+    "interactive": [
+        "accountListPortForward"                               , {"ac" : ["--account"]},
+        "accountListPortForward +--account"                    , {"ac" : ["<ACCOUNT>"]},
+        "accountListPortForward +--account +\\S+"              , {"ac" : ["<enter>", "--reverse-dns"]},
+        "accountListPortForward +--account +\\S+ +--reverse-dns", {"pr" : ["<enter>"]}
+    ]
+}

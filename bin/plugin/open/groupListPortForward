@@ -1,0 +1,92 @@
+#! /usr/bin/env perl
+# vim: set filetype=perl ts=4 sw=4 sts=4 et:
+use common::sense;
+
+use File::Basename;
+use lib dirname(__FILE__) . '/../../../lib/perl';
+use OVH::Result;
+use OVH::Bastion;
+use OVH::Bastion::Plugin qw( :DEFAULT help );
+
+# globally allow sys_getpw* and sys_getgr* cache use
+$ENV{'PW_GR_CACHE'} = 1;
+
+my $remainingOptions = OVH::Bastion::Plugin::begin(
+    argv    => \@ARGV,
+    header  => "list of port forwarding accesses pertaining to the group",
+    options => {
+        "group=s"     => \my $group,
+        "reverse-dns" => \my $reverse,
+        "include=s"   => \my @includes,
+        "exclude=s"   => \my @excludes,
+    },
+    helptext => <<'EOF',
+List the port forwarding accesses pertaining to a group
+
+Usage: --osh SCRIPT_NAME --group GROUP [--reverse-dns]
+
+  --group GROUP      List the port forwarding accesses of this group
+  --reverse-dns      Attempt to resolve the reverse hostnames (SLOW!)
+  --include PATTERN  Only include accesses matching the given PATTERN (see below)
+                        This option can be used multiple times to refine results
+  --exclude PATTERN  Omit accesses matching the given PATTERN (see below)
+                        This option can be used multiple times.
+                        Note that --exclude takes precedence over --include
+
+**Note:** PATTERN supports the ``*`` and ``?`` wildcards.
+If PATTERN is a simple string without wildcards, then names containing this string will be considered.
+The matching is done on the text output of the command.
+EOF
+);
+
+my $fnret;
+
+if (!$group) {
+    help();
+    osh_exit 'ERR_MISSING_PARAMETER', "Missing parameter 'group'";
+}
+
+$fnret = OVH::Bastion::is_valid_group_and_existing(group => $group, groupType => "key");
+$fnret or osh_exit $fnret;
+
+# get returned untainted value
+$group = $fnret->value->{'group'};
+my $shortGroup = $fnret->value->{'shortGroup'};
+
+if (
+    !(
+           OVH::Bastion::is_group_member(group => $shortGroup, account => $self)
+        || OVH::Bastion::is_group_aclkeeper(group => $shortGroup, account => $self, superowner => 1)
+        || OVH::Bastion::is_auditor(account => $self)
+    )
+  )
+{
+    osh_exit(
+        R(
+            'KO_ACCESS_DENIED',
+            msg =>
+              "Sorry, you're neither a member or aclkeeper of group $shortGroup, you can't list the port forwarding accesses of this group.\n"
+              . "If you think you should be able to, use groupInfo to get contact info."
+        )
+    );
+}
+
+$fnret = OVH::Bastion::get_portforward_acl_way(way => 'group', group => $shortGroup);
+$fnret or osh_exit $fnret;
+
+if (not @{$fnret->value}) {
+    osh_ok R('OK_EMPTY',
+        msg =>
+          "This group has no port forwarding accesses, if you are an aclkeeper of this group, you might want to add some with groupAddPortForward"
+    );
+}
+
+osh_info "Group $shortGroup has the following port forwarding accesses:\n";
+
+OVH::Bastion::print_portforward_acls(
+    acls => [{type => 'group', group => $shortGroup, acl => $fnret->value}],
+    reverse  => $reverse,
+    includes => \@includes,
+    excludes => \@excludes
+);
+osh_ok($fnret->value);

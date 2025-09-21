@@ -1,0 +1,18 @@
+{
+    "interactive": [
+        "groupDelGuestPortForward"                                , {"ac" : ["--account"]},
+        "groupDelGuestPortForward +--account"                     , {"ac" : ["<ACCOUNT>"]},
+        "groupDelGuestPortForward +--account +\\S+"               , {"ac" : ["--group"]},
+        "groupDelGuestPortForward +--account +\\S+ +--group"      , {"ac" : ["<GROUP>"]},
+        "groupDelGuestPortForward +--account +\\S+ +--group +\\S+" , {"ac" : ["--host"]},
+        "groupDelGuestPortForward +--account +\\S+ +--group +\\S+ +--host" , {"pr" : ["<HOST>", "<IP>", "<IP/MASK>"]},
+        "groupDelGuestPortForward +--account +\\S+ +--group +\\S+ +--host +\\S+"                                           , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port"]},
+        "groupDelGuestPortForward +--account +\\S+ +--group +\\S+ +--host +\\S+ +.*--remote-user"                          , {"pr" : ["<USER>"]},
+        "groupDelGuestPortForward +--account +\\S+ +--group +\\S+ +--host +\\S+ +.*--ssh-port"                             , {"pr" : ["<PORT>"]},
+        "groupDelGuestPortForward +--account +\\S+ +--group +\\S+ +--host +\\S+ +.*--forward-port"                         , {"pr" : ["<PORT>"]},
+        "groupDelGuestPortForward +--account +\\S+ +--group +\\S+ +--host +\\S+ +--(remote-user|ssh-port|forward-port) +\\S+"                              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port"]},
+        "groupDelGuestPortForward +--account +\\S+ +--group +\\S+ +--host +\\S+ +--(remote-user|ssh-port|forward-port) +\\S+ +--(remote-user|ssh-port|forward-port) +\\S+"                              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port"]},
+        "groupDelGuestPortForward +--account +\\S+ +--group +\\S+ +--host +\\S+ +--(remote-user|ssh-port|forward-port) +\\S+ +--(remote-user|ssh-port|forward-port) +\\S+ +--(remote-user|ssh-port|forward-port) +\\S+" , {"pr" : ["<enter>"]}
+    ],
+    "master_only": true
+}

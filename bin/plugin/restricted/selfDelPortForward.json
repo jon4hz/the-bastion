@@ -1,0 +1,14 @@
+{
+    "interactive": [
+        "selfDelPortForward"                         , {"ac" : ["--host"]},
+        "selfDelPortForward +--host"                 , {"pr" : ["<HOST>", "<IP>", "<IP/MASK>"]},
+        "selfDelPortForward +--host +\\S+"           , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--remote-port"]},
+        "selfDelPortForward +--host +\\S+ +.*--remote-user" , {"pr" : ["<USER>"]},
+        "selfDelPortForward +--host +\\S+ +.*--ssh-port"    , {"pr" : ["<PORT>"]},
+        "selfDelPortForward +--host +\\S+ +.*--forward-port" , {"pr" : ["<PORT>"]},
+        "selfDelPortForward +--host +\\S+ +.*--remote-port"  , {"pr" : ["<PORT>"]},
+        "selfDelPortForward +--host +\\S+ +--(remote-user|ssh-port|forward-port|remote-port) +\\S+"                              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--remote-port"]},
+        "selfDelPortForward +--host +\\S+ +--(remote-user|ssh-port|forward-port) +\\S+ +--(remote-user|ssh-port|forward-port|remote-port) +\\S+" , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--remote-port"]},
+        "selfDelPortForward +--host +\\S+ +--(remote-user|ssh-port|forward-port) +\\S+ +--(remote-user|ssh-port|forward-port|remote-port) +\\S+ +--(remote-user|ssh-port|forward-port|remote-port) +\\S+" , {"pr" : ["<enter>"]}
+    ]
+}

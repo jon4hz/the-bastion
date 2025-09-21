@@ -1,0 +1,22 @@
+{
+    "interactive": [
+        "groupAddPortForward"                        , {"ac" : ["--group"]},
+        "groupAddPortForward +--group"               , {"ac" : ["<GROUP>"]},
+        "groupAddPortForward +--group +\\S+"         , {"ac" : ["--host"]},
+        "groupAddPortForward +--group +\\S+ +--host" , {"pr" : ["<HOST>", "<IP>", "<IP/MASK>"]},
+        "groupAddPortForward +--group +\\S+ +--host +\\S+"                                           , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--remote-port"]},
+        "groupAddPortForward +--group +\\S+ +--host +\\S+ +.*--remote-user"                          , {"pr" : ["<USER>"]},
+        "groupAddPortForward +--group +\\S+ +--host +\\S+ +.*--ssh-port"                             , {"pr" : ["<PORT>"]},
+        "groupAddPortForward +--group +\\S+ +--host +\\S+ +.*--forward-port"                         , {"pr" : ["<PORT>"]},
+        "groupAddPortForward +--group +\\S+ +--host +\\S+ +.*--remote-port"                          , {"pr" : ["<PORT>"]},
+        "groupAddPortForward +--group +\\S+ +--host +\\S+ +--(remote-user|ssh-port|forward-port|remote-port) +\\S+"                              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--remote-port", "--ttl", "--comment", "--force-key", "--force-password"]},
+        "groupAddPortForward +--group +\\S+ +--remote-host +\\S+ +--(remote-user|ssh-port|forward-port|remote-port) +\\S+ +--(remote-user|ssh-port|forward-port|remote-port) +\\S+"                              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--remote-port", "--ttl", "--comment", "--force-key", "--force-password"]},
+        "groupAddPortForward +--group +\\S+ +--remote-host +\\S+ +.*--ttl"                                  , {"pr" : ["<SECONDS>", "<DURATION>"]},
+        "groupAddPortForward +--group +\\S+ +--remote-host +\\S+ +.*--comment"                              , {"pr" : ["<COMMENT>"]},
+        "groupAddPortForward +--group +\\S+ +--remote-host +\\S+ +.*--force-key"                            , {"pr" : ["<FINGERPRINT>"]},
+        "groupAddPortForward +--group +\\S+ +--remote-host +\\S+ +.*--force-password"                       , {"pr" : ["<HASH>"]},
+        "groupAddPortForward +--group +\\S+ +--remote-host +\\S+ +.*--(ttl|comment|force-key|force-password) +\\S+"              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--remote-port", "--ttl", "--comment", "--force-key", "--force-password"]},
+        "groupAddPortForward +--group +\\S+ +--remote-host +\\S+ +.*--(ttl|comment|force-key|force-password) +\\S+ +--(remote-user|ssh-port|forward-port|remote-port|ttl|comment|force-key|force-password) +\\S+" , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--remote-port", "--ttl", "--comment", "--force-key", "--force-password"]}
+    ],
+    "master_only": true
+}
