@@ -76,7 +76,6 @@ $group = $group_check->value->{'group'};
 my $groupName = $group_check->value->{'shortGroup'};
 #<PARAMS:GROUP
 
-
 #>CODE
 my $machine = "$remote_ip:" . ($ssh_port || '*') . "->" . ($forward_port || '*') . " (" . ($remote_user || '*') . ")";
 

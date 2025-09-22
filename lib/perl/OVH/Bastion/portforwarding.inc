@@ -1111,7 +1111,7 @@ sub get_port_forwards_from_file {
             # parse: remote_ip:ssh_port:forward_port:remote_user:local_port:rule_id [comment]
             if ($line =~ m{^(\[[^\]]+\]|[^:]+):([^:]*):([^:]*):([^:]*):([^:]*):([^:\s]*)\s*(?:#\s*(.*))?$}) {
                 my ($remote_ip, $ssh_port, $forward_port, $remote_user, $local_port, $rule_id, $comment_part) =
-                    ($1, $2, $3, $4, $5, $6, $7);
+                  ($1, $2, $3, $4, $5, $6, $7);
 
                 # remove brackets from IPv6 addresses
                 $remote_ip =~ s/^\[|\]$//g;
