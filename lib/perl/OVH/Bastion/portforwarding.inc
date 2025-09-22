@@ -430,7 +430,7 @@ sub portforward_modify {
             push @one_should_succeed,
               OVH::Bastion::is_user_in_group(
                 user  => $requester,
-                group => 'osh-self' . ucfirst($action) . 'PersonalAccess',
+                group => 'osh-self' . ucfirst($action) . 'PortForward',
                 sudo  => $sudo,
               );
         }
@@ -439,7 +439,7 @@ sub portforward_modify {
         push @one_should_succeed,
           OVH::Bastion::is_user_in_group(
             user  => $requester,
-            group => 'osh-account' . ucfirst($action) . 'PersonalAccess',
+            group => 'osh-account' . ucfirst($action) . 'PortForward',
             sudo  => $sudo
           );
     }
