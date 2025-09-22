@@ -40,6 +40,10 @@ SUPEROWNERS, %%GROUP%-aclkeeper  ALL=(%GROUP%)     NOPASSWD: /usr/bin/env perl -
 # as an aclkeeper, we can add/del a server from the group port forward list in /home/%GROUP%/allowed.forward
 SUPEROWNERS, %%GROUP%-aclkeeper  ALL=(%GROUP%)     NOPASSWD: /usr/bin/env perl -T %BASEPATH%/bin/helper/osh-groupAddPortForward --group %GROUP% *
 
+# as a group user, we can regenerate SSH port forwarding configs when port forwards change
+%GROUP%                          ALL=(root)        NOPASSWD: /usr/bin/env perl -T %BASEPATH%/bin/helper/osh-genSSHPFConfigs --account *
+%GROUP%                          ALL=(root)        NOPASSWD: /usr/bin/env perl -T %BASEPATH%/bin/helper/osh-regenSSHPFConfigsForGroup --group *
+
 # as an aclkeeper, we can replace the group servers list in /home/%GROUP%/allowed.ip in batch with one command
 SUPEROWNERS, %%GROUP%-aclkeeper  ALL=(%GROUP%)     NOPASSWD: /usr/bin/env perl -T %BASEPATH%/bin/helper/osh-groupSetServers --group %GROUP%
 

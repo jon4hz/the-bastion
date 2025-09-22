@@ -2,7 +2,7 @@
 # vim: set filetype=perl ts=4 sw=4 sts=4 et:
 # KEYSUDOERS # regenerate sshd port forwarding configs for group members
 # KEYSUDOERS SUPEROWNERS ALL=(root) NOPASSWD: /usr/bin/env perl -T %BASEPATH%/bin/helper/osh-regenSSHPFConfigsForGroup --group %GROUP%
-# FILEMODE 0750
+# FILEMODE 0755
 # FILEOWN 0 root
 
 #>HEADER
