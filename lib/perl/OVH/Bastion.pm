@@ -146,7 +146,7 @@ my %_autoload_files = (
         qw{ is_user_in_group is_group_existing is_valid_uid get_next_available_uid is_bastion_account_valid_and_existing is_account_valid is_account_existing access_modify is_valid_group is_valid_group_and_existing add_user_to_group get_group_list get_account_list get_realm_list is_admin is_super_owner is_auditor is_group_aclkeeper is_group_gatekeeper is_group_owner is_group_guest is_group_member get_remote_accounts_from_realm is_valid_ttl build_re_from_wildcards }
     ],
     portforwarding => [
-        qw{ portforward_modify is_portforward_way_granted get_portforward_acls get_portforward_acl_way get_portforward_acl_way_from_file print_portforward_acls }
+        qw{ portforward_modify is_portforward_way_granted get_portforward_acls get_portforward_acl_way get_portforward_acl_way_from_file print_portforward_acls get_port_forwards_from_file }
     ],
     configuration => [
         qw{ load_configuration_file main_configuration_directory load_configuration config account_config plugin_config group_config json_load }

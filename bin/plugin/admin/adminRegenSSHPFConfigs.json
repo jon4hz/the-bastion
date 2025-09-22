@@ -1,0 +1,12 @@
+{
+    "plugin": "adminRegenSSHPFConfigs",
+    "interactive": [
+        "adminRegenSSHPFConfigs"                                               , {"ac": ["--account", "--group", "--all-accounts"]},
+        "adminRegenSSHPFConfigs +--account"                                    , {"pr": ["<ACCOUNT>"]},
+        "adminRegenSSHPFConfigs +--account +\\S+"                              , {"ac": ["<enter>"]},
+        "adminRegenSSHPFConfigs +--group"                                      , {"pr": ["<GROUP>"]},
+        "adminRegenSSHPFConfigs +--group +\\S+"                                , {"ac": ["<enter>"]},
+        "adminRegenSSHPFConfigs +--all-accounts"                               , {"ac": ["<enter>"]}
+    ],
+    "master_only": true
+}
