@@ -114,15 +114,26 @@ if (@accounts_to_regenerate) {
     my $failed_count = 0;
     
     foreach my $account (@accounts_to_regenerate) {
-        my @cmd = ('sudo', '-n', '/usr/bin/perl', '-T', $OVH::Bastion::BASEPATH . '/bin/helper/osh-genSSHPFConfigs', '--account', $account);
-        my $ssh_config_fnret = OVH::Bastion::helper(
-            cmd => \@cmd
-        );
-        if ($ssh_config_fnret) {
-            $success_count++;
+        # Validate and untaint the account name before calling the helper
+        my $account_check = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);
+        if ($account_check) {
+            my $untainted_account = $account_check->value->{'account'};
+            my @cmd = ('sudo', '-n', '/usr/bin/env', 'perl', '-T', $OVH::Bastion::BASEPATH . '/bin/helper/osh-genSSHPFConfigs', '--account', $untainted_account);
+            my $ssh_config_fnret = OVH::Bastion::helper(
+                cmd => \@cmd
+            );
+            if ($ssh_config_fnret) {
+                $success_count++;
+            }
+            else {
+                $failed_count++;
+                osh_warn("Failed to regenerate SSH config for account $account");
+            }
         }
         else {
             $failed_count++;
+            osh_warn("Cannot regenerate SSH config for invalid account: $account");
+        }
             osh_warn("Failed to regenerate SSH config for account $account");
         }
     }

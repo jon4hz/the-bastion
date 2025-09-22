@@ -56,3 +56,11 @@ remoteuser="bastionsync"
 # DEFAULT: ""
 # EXAMPLE: "192.0.2.17 192.0.2.12:2244"
 remotehostlist=""
+#
+# > SSH daemon management
+# >> These options configure how the SSH daemon is managed on slave nodes
+#
+# reload_sshd_on_config_change (0|1)
+#    DESC: If set to 1, the SSH daemon will be reloaded on slave nodes when SSH port forwarding configurations change. This ensures that new port forwarding rules take effect immediately. Set to 0 to disable automatic reloading.
+# DEFAULT: 1
+reload_sshd_on_config_change=1

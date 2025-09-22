@@ -251,11 +251,7 @@ foreach my $acc (@accounts_to_process) {
         # Add comments showing the source of each destination
         $config_content .= "#\n# Port forwarding configuration:\n";
         if (@local_ports) {
-            $config_content .= "# Local listening ports (allocated): " . join(', ', @local_ports) . "\n";
-        }
-        $config_content .= "# Remote destinations:\n";
-        foreach my $permit_open (@sorted_lines) {
-            $config_content .= "#   $permit_open - from $merged{$permit_open}\n";
+            $config_content .= "# Local listening ports: " . join(', ', @local_ports) . "\n";
         }
         $config_content .= "\n";
         
