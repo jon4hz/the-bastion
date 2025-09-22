@@ -94,6 +94,12 @@ fi
 # finally, regenerate the account's sudoers
 _run "$basedir"/bin/sudogen/generate-sudoers.sh create account "$to"
 _run "$basedir"/bin/sudogen/generate-sudoers.sh delete account "$from"
+
+# regenerate SSH port forwarding configs for the port forwarding feature
+# delete the old SSH config file for the old account name (if it exists)
+_run rm -f "/etc/ssh/sshd_config.forward.d/$from.conf"
+# generate new SSH config for the new account name (this handles the feature being enabled/disabled internally)
+_run "$basedir"/bin/helper/osh-genSSHPFConfigs --account "$to"
 }
 
 
