@@ -264,7 +264,7 @@ sub get_attestation_material {
 
 sub checkExistKey {
     # only pass the base64 part of the key here (returned by get_ssh_pub_key_info->{'base64'})
-    my $pubKeyB64      = shift;
+    my $pubKeyB64 = shift;
     open(my $fh_keys, '<', $allowedKeyFile) || die("can't read the $allowedKeyFile file!\n");
     while (my $currentLine = <$fh_keys>) {
         chomp $currentLine;

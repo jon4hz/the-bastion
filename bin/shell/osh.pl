@@ -668,7 +668,6 @@ if ($fnret) {
 my @validatedForwards;
 if ($localForwards && @$localForwards) {
     # Check if port forwarding is globally enabled
-    my $config = OVH::Bastion::load_configuration()->value;
     if (!$config->{'portForwardingEnabled'}) {
         main_exit(OVH::Bastion::EXIT_ACCESS_DENIED,
             'port_forwarding_disabled', "Port forwarding feature is disabled on this bastion");

@@ -77,7 +77,8 @@ if (!$fnret) {
 
 foreach my $account (keys %{$fnret->value}) {
     # Skip system accounts
-    next if $account =~ /^(root|bastionsync|healthcheck|keykeeper|keyreader|allowkeeper|proxyhttp)$/;
+    my %system_accounts = map { $_ => 1 } qw(root bastionsync healthcheck keykeeper keyreader allowkeeper proxyhttp);
+    next if exists $system_accounts{$account};
 
     # Check if this account has a symlink to the group's port forward file
     my $account_info = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);

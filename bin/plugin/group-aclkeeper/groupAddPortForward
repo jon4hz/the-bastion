@@ -85,7 +85,7 @@ $sshPort     = $fnret->value->{'sshPort'};
 $forwardPort = $fnret->value->{'forwardPort'};
 
 # Check if port forwarding is enabled in configuration
-my $fnret = OVH::Bastion::load_configuration();
+$fnret = OVH::Bastion::load_configuration();
 if (!$fnret) {
     osh_exit 'ERR_CONFIGURATION', "Failed to load configuration";
 }

@@ -93,7 +93,7 @@ my $msg;
 my $prefix = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
 
 # Handle both IP and port forwarding symlinks
-my @file_types = ('ip', 'forward');
+my @file_types = qw(ip forward);
 my @results;
 my $any_changes = 0;
 

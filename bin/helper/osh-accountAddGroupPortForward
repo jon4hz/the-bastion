@@ -49,7 +49,7 @@ if (not $action or not $remote_ip or not $account or not $group) {
 }
 
 # Check if port forwarding is enabled in configuration
-my $fnret = OVH::Bastion::load_configuration();
+$fnret = OVH::Bastion::load_configuration();
 if (!$fnret) {
     HEXIT('ERR_CONFIGURATION', msg => "Failed to load configuration");
 }

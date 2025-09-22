@@ -46,7 +46,7 @@ if ($account && $all_accounts) {
 #<HEADER
 
 # Check if port forwarding is enabled
-my $fnret = OVH::Bastion::load_configuration();
+$fnret = OVH::Bastion::load_configuration();
 if (!$fnret) {
     HEXIT('ERR_CONFIGURATION', msg => "Failed to load configuration");
 }
@@ -113,7 +113,8 @@ my $configs_removed   = 0;
 
 foreach my $acc (@accounts_to_process) {
     # Skip system accounts
-    next if $acc =~ /^(root|bastionsync|healthcheck|keykeeper|keyreader|allowkeeper|proxyhttp)$/;
+    my %system_accounts = map { $_ => 1 } qw(root bastionsync healthcheck keykeeper keyreader allowkeeper proxyhttp);
+    next if exists $system_accounts{$acc};
 
     # Validate account exists
     $fnret = OVH::Bastion::is_bastion_account_valid_and_existing(account => $acc);
