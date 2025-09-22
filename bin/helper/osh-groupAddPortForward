@@ -17,21 +17,21 @@ use OVH::Bastion::Helper;
 
 # Fetch command options
 my $fnret;
-my ($result, @optwarns);
-my ($group, $remote_ip, $remote_user, $ssh_port, $forward_port, $action, $ttl, $comment);
+my ($result,   @optwarns);
+my ($group,    $remote_ip, $remote_user, $ssh_port, $forward_port, $action, $ttl, $comment);
 my ($forceKey, $forcePassword);
 eval {
     local $SIG{__WARN__} = sub { push @optwarns, shift };
     $result = GetOptions(
-        "group=s"          => sub { $group //= $_[1] },
-        "remote-ip=s"      => sub { $remote_ip //= $_[1] },
-        "remote-user=s"    => sub { $remote_user //= $_[1] },
-        "ssh-port=s"       => sub { $ssh_port //= $_[1] },
-        "forward-port=s"   => sub { $forward_port //= $_[1] },
-        "action=s"         => sub { $action //= $_[1] },
-        "ttl=s"            => sub { $ttl //= $_[1] },
-        "comment=s"        => sub { $comment //= $_[1] },
-        "force-key=s"      => sub { $forceKey //= $_[1] },
+        "group=s"          => sub { $group         //= $_[1] },
+        "remote-ip=s"      => sub { $remote_ip     //= $_[1] },
+        "remote-user=s"    => sub { $remote_user   //= $_[1] },
+        "ssh-port=s"       => sub { $ssh_port      //= $_[1] },
+        "forward-port=s"   => sub { $forward_port  //= $_[1] },
+        "action=s"         => sub { $action        //= $_[1] },
+        "ttl=s"            => sub { $ttl           //= $_[1] },
+        "comment=s"        => sub { $comment       //= $_[1] },
+        "force-key=s"      => sub { $forceKey      //= $_[1] },
         "force-password=s" => sub { $forcePassword //= $_[1] },
     );
 };
@@ -97,13 +97,12 @@ if ($fnret->err eq 'OK') {
     my $config_check = OVH::Bastion::load_configuration();
     if ($config_check && $config_check->value && $config_check->value->{'portForwardingSSHConfigEnabled'}) {
         my $ssh_config_fnret = OVH::Bastion::helper(
-            cmd => [$OVH::Bastion::BASEPATH . '/bin/helper/osh-regenSSHPFConfigsForGroup', '--group', $shortGroup]
-        );
+            cmd => [$OVH::Bastion::BASEPATH . '/bin/helper/osh-regenSSHPFConfigsForGroup', '--group', $shortGroup]);
         if (!$ssh_config_fnret) {
             osh_warn("Failed to regenerate SSH port forwarding configs for group $shortGroup");
         }
     }
-    
+
     my $ttlmsg = $ttl ? ' (expires in ' . OVH::Bastion::duration2human(seconds => $ttl)->value->{'human'} . ')' : '';
     HEXIT(
         'OK',

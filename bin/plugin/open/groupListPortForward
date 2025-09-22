@@ -84,7 +84,7 @@ if (not @{$fnret->value}) {
 osh_info "Group $shortGroup has the following port forwarding accesses:\n";
 
 OVH::Bastion::print_portforward_acls(
-    acls => [{type => 'group', group => $shortGroup, acl => $fnret->value}],
+    acls     => [{type => 'group', group => $shortGroup, acl => $fnret->value}],
     reverse  => $reverse,
     includes => \@includes,
     excludes => \@excludes

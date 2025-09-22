@@ -114,7 +114,7 @@ sub check_portforward {
     # SSH port validation - optional, defaults to 22
     if (defined $sshPort && $sshPort ne '') {
         if ($sshPort eq '*') {
-            undef $sshPort;  # Allow any SSH port
+            undef $sshPort;    # Allow any SSH port
         }
         else {
             my $fnret = OVH::Bastion::is_valid_port(port => $sshPort);
@@ -128,7 +128,7 @@ sub check_portforward {
     # Forward port validation - optional, can be any port
     if (defined $forwardPort && $forwardPort ne '') {
         if ($forwardPort eq '*') {
-            undef $forwardPort;  # Allow any forward port
+            undef $forwardPort;    # Allow any forward port
         }
         else {
             my $fnret = OVH::Bastion::is_valid_port(port => $forwardPort);
@@ -139,11 +139,14 @@ sub check_portforward {
         }
     }
 
-    return R('OK', value => {
-        remoteUser   => $remoteUser,
-        sshPort      => $sshPort,
-        forwardPort  => $forwardPort
-    });
+    return R(
+        'OK',
+        value => {
+            remoteUser  => $remoteUser,
+            sshPort     => $sshPort,
+            forwardPort => $forwardPort
+        }
+    );
 }
 
 1;

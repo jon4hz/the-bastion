@@ -98,9 +98,9 @@ my @results;
 my $any_changes = 0;
 
 foreach my $type (@file_types) {
-    my $link = "/home/allowkeeper/$sysaccount/$prefix.$type.$shortGroup";
+    my $link   = "/home/allowkeeper/$sysaccount/$prefix.$type.$shortGroup";
     my $source = "/home/$group/allowed.$type";
-    
+
     if ($action eq 'del') {
         osh_debug("Going to remove $type symlink: $link");
         if (-l $link || -e _) {
@@ -162,14 +162,22 @@ if (!$any_changes) {
 if ($any_changes) {
     # Check if port forwarding is enabled first
     my $config_fnret = OVH::Bastion::load_configuration();
-    if ($config_fnret && $config_fnret->value && $config_fnret->value->{'portForwardingEnabled'} && $config_fnret->value->{'portForwardingSSHConfigEnabled'}) {
+    if (   $config_fnret
+        && $config_fnret->value
+        && $config_fnret->value->{'portForwardingEnabled'}
+        && $config_fnret->value->{'portForwardingSSHConfigEnabled'})
+    {
         # Regenerate SSH port forwarding config for this account
         # Validate and untaint the account name before calling the helper
         my $account_check = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);
         if ($account_check) {
             my $untainted_account = $account_check->value->{'account'};
-            my $ssh_config_fnret = OVH::Bastion::helper(
-                cmd => ['sudo', '-n', '/usr/bin/env', 'perl', '-T', $OVH::Bastion::BASEPATH . '/bin/helper/osh-genSSHPFConfigs', '--account', $untainted_account]
+            my $ssh_config_fnret  = OVH::Bastion::helper(
+                cmd => [
+                    'sudo', '-n', '/usr/bin/env', 'perl', '-T',
+                    $OVH::Bastion::BASEPATH . '/bin/helper/osh-genSSHPFConfigs',
+                    '--account', $untainted_account
+                ]
             );
             if (!$ssh_config_fnret) {
                 osh_warn("Failed to regenerate SSH port forwarding config for account $account");
@@ -177,9 +185,6 @@ if ($any_changes) {
         }
         else {
             osh_warn("Cannot regenerate SSH config for invalid account: $account");
-        }
-        else {
-            osh_debug("Regenerated SSH port forwarding config for account $account due to group membership change");
         }
     }
 }

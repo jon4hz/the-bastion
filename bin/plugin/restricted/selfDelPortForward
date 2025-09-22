@@ -14,10 +14,10 @@ my $remainingOptions = OVH::Bastion::Plugin::begin(
     header             => "remove port forwarding access from your account",
     userAllowWildcards => 1,
     options            => {
-        "remote-user=s"      => \my $remoteUser,
-        "ssh-port=s"         => \my $sshPort,
-        "forward-port=s"     => \my $forwardPort,
-        "remote-port=s"      => \my $remotePort,    # deprecated, for backward compatibility
+        "remote-user=s"  => \my $remoteUser,
+        "ssh-port=s"     => \my $sshPort,
+        "forward-port=s" => \my $forwardPort,
+        "remote-port=s"  => \my $remotePort,    # deprecated, for backward compatibility
     },
     helptext => <<'EOF',
 Remove port forwarding access from your account
@@ -51,9 +51,9 @@ if ($remotePort && !$forwardPort) {
 }
 
 $fnret = OVH::Bastion::Plugin::ACL::check_portforward(
-    remoteUser   => $remoteUser,
-    sshPort      => $sshPort,
-    forwardPort  => $forwardPort,
+    remoteUser  => $remoteUser,
+    sshPort     => $sshPort,
+    forwardPort => $forwardPort,
 );
 if (not $fnret) {
     help();
@@ -73,7 +73,11 @@ if (!$config->{'portForwardingEnabled'}) {
     osh_exit 'ERR_FORBIDDEN', "Port forwarding feature is disabled on this bastion";
 }
 
-osh_info "Removing port forward access to $ip:" . ($sshPort || '*') . "->" . ($forwardPort || '*') . " (" . ($remoteUser || '*') . ") from your account...";
+osh_info "Removing port forward access to $ip:"
+  . ($sshPort     || '*') . "->"
+  . ($forwardPort || '*') . " ("
+  . ($remoteUser  || '*')
+  . ") from your account...";
 
 my @command = qw{ sudo -n -u allowkeeper -- /usr/bin/env perl -T };
 push @command, $OVH::Bastion::BASEPATH . '/bin/helper/osh-accountModifyPortForward';

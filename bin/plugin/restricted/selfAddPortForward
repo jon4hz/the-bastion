@@ -14,14 +14,14 @@ my $remainingOptions = OVH::Bastion::Plugin::begin(
     header             => "add port forwarding access to your account",
     userAllowWildcards => 1,
     options            => {
-        "remote-user=s"      => \my $remoteUser,
-        "ssh-port=s"         => \my $sshPort,
-        "forward-port=s"     => \my $forwardPort,
-        "remote-port=s"      => \my $remotePort,    # deprecated, for backward compatibility
-        "ttl=s"              => \my $ttl,
-        "comment=s"          => \my $comment,
-        "force-key=s"        => \my $forceKey,
-        "force-password=s"   => \my $forcePassword,
+        "remote-user=s"    => \my $remoteUser,
+        "ssh-port=s"       => \my $sshPort,
+        "forward-port=s"   => \my $forwardPort,
+        "remote-port=s"    => \my $remotePort,      # deprecated, for backward compatibility
+        "ttl=s"            => \my $ttl,
+        "comment=s"        => \my $comment,
+        "force-key=s"      => \my $forceKey,
+        "force-password=s" => \my $forcePassword,
     },
     helptext => <<'EOF',
 Add port forwarding access to your account
@@ -67,9 +67,9 @@ if ($remotePort && !$forwardPort) {
 }
 
 $fnret = OVH::Bastion::Plugin::ACL::check_portforward(
-    remoteUser   => $remoteUser,
-    sshPort      => $sshPort,
-    forwardPort  => $forwardPort,
+    remoteUser  => $remoteUser,
+    sshPort     => $sshPort,
+    forwardPort => $forwardPort,
 );
 if (not $fnret) {
     help();
@@ -101,20 +101,24 @@ if (!$comment && $host ne $ip) {
     $comment = "hostname=$host";
 }
 
-osh_info "Adding port forward access to $ip:" . ($sshPort || '*') . "->" . ($forwardPort || '*') . " (" . ($remoteUser || '*') . ") to your account...";
+osh_info "Adding port forward access to $ip:"
+  . ($sshPort     || '*') . "->"
+  . ($forwardPort || '*') . " ("
+  . ($remoteUser  || '*')
+  . ") to your account...";
 
 my @command = qw{ sudo -n -u allowkeeper -- /usr/bin/env perl -T };
 push @command, $OVH::Bastion::BASEPATH . '/bin/helper/osh-accountModifyPortForward';
-push @command, '--target',        'self';
-push @command, '--action',        'add';
-push @command, '--account',       $self;
-push @command, '--remote-ip',     $ip;
-push @command, '--remote-user',   $remoteUser   if $remoteUser;
-push @command, '--ssh-port',      $sshPort      if $sshPort;
-push @command, '--forward-port',  $forwardPort  if $forwardPort;
-push @command, '--ttl',           $ttl          if $ttl;
-push @command, '--comment',       $comment      if $comment;
-push @command, '--force-key',     $forceKey     if $forceKey;
+push @command, '--target',         'self';
+push @command, '--action',         'add';
+push @command, '--account',        $self;
+push @command, '--remote-ip',      $ip;
+push @command, '--remote-user',    $remoteUser    if $remoteUser;
+push @command, '--ssh-port',       $sshPort       if $sshPort;
+push @command, '--forward-port',   $forwardPort   if $forwardPort;
+push @command, '--ttl',            $ttl           if $ttl;
+push @command, '--comment',        $comment       if $comment;
+push @command, '--force-key',      $forceKey      if $forceKey;
 push @command, '--force-password', $forcePassword if $forcePassword;
 
 osh_exit OVH::Bastion::helper(cmd => \@command);

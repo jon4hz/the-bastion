@@ -17,13 +17,13 @@ use OVH::Bastion::Helper;
 
 # Fetch command options
 my $fnret;
-my ($result, @optwarns);
+my ($result,  @optwarns);
 my ($account, $all_accounts);
 eval {
     local $SIG{__WARN__} = sub { push @optwarns, shift };
     $result = GetOptions(
-        "account=s"        => sub { $account //= $_[1] },
-        "all-accounts!"    => \$all_accounts,
+        "account=s"     => sub { $account //= $_[1] },
+        "all-accounts!" => \$all_accounts,
     );
 };
 if ($@) { die $@ }
@@ -56,15 +56,15 @@ if (!$config->{'portForwardingEnabled'}) {
     # Port forwarding is disabled, clean up any existing configs
     if ($all_accounts) {
         osh_info("Port forwarding disabled, cleaning up all SSH port forward configs");
-        system("/bin/rm", "-rf", "/etc/ssh/sshd_config.forward.d/");
-        system("/usr/bin/mkdir", "-p", "/etc/ssh/sshd_config.forward.d/");
+        system("/bin/rm",        "-rf", "/etc/ssh/sshd_config.forward.d/");
+        system("/usr/bin/mkdir", "-p",  "/etc/ssh/sshd_config.forward.d/");
     }
     elsif ($account) {
         osh_info("Port forwarding disabled, cleaning up SSH port forward config for $account");
         # Untaint the account name for file operations
         my $safe_account = $account;
         if ($safe_account =~ /^([a-zA-Z0-9._-]+)$/) {
-            $safe_account = $1;  # Untainted
+            $safe_account = $1;    # Untainted
             my $config_file = "/etc/ssh/sshd_config.forward.d/$safe_account.conf";
             unlink($config_file) if -f $config_file;
         }
@@ -76,15 +76,15 @@ if (!$config->{'portForwardingSSHConfigEnabled'}) {
     # SSH config generation is disabled
     if ($all_accounts) {
         osh_info("SSH port forwarding config generation disabled, cleaning up all configs");
-        system("/bin/rm", "-rf", "/etc/ssh/sshd_config.forward.d/");
-        system("/usr/bin/mkdir", "-p", "/etc/ssh/sshd_config.forward.d/");
+        system("/bin/rm",        "-rf", "/etc/ssh/sshd_config.forward.d/");
+        system("/usr/bin/mkdir", "-p",  "/etc/ssh/sshd_config.forward.d/");
     }
     elsif ($account) {
         osh_info("SSH port forwarding config generation disabled, cleaning up config for $account");
         # Untaint the account name for file operations
         my $safe_account = $account;
         if ($safe_account =~ /^([a-zA-Z0-9._-]+)$/) {
-            $safe_account = $1;  # Untainted
+            $safe_account = $1;    # Untainted
             my $config_file = "/etc/ssh/sshd_config.forward.d/$safe_account.conf";
             unlink($config_file) if -f $config_file;
         }
@@ -109,38 +109,39 @@ else {
 }
 
 my $configs_generated = 0;
-my $configs_removed = 0;
+my $configs_removed   = 0;
 
 foreach my $acc (@accounts_to_process) {
     # Skip system accounts
     next if $acc =~ /^(root|bastionsync|healthcheck|keykeeper|keyreader|allowkeeper|proxyhttp)$/;
-    
+
     # Validate account exists
     $fnret = OVH::Bastion::is_bastion_account_valid_and_existing(account => $acc);
     if (!$fnret) {
         osh_warn("Skipping invalid account $acc");
         next;
     }
-    
-    my $account_info = $fnret->value;
-    my $sysaccount = $account_info->{'sysaccount'};
+
+    my $account_info  = $fnret->value;
+    my $sysaccount    = $account_info->{'sysaccount'};
     my $remoteaccount = $account_info->{'remoteaccount'};
-    
+
     # Untaint the account name for file operations
     my $safe_acc = $acc;
     if ($safe_acc =~ /^([a-zA-Z0-9._-]+)$/) {
-        $safe_acc = $1;  # Untainted
-    } else {
+        $safe_acc = $1;    # Untainted
+    }
+    else {
         osh_warn("Invalid account name format: $acc");
         return R('KO_INVALID_PARAMETER', msg => "Invalid account name format");
     }
-    
+
     my $config_file = "/etc/ssh/sshd_config.forward.d/$safe_acc.conf";
-    
+
     # Collect all port forwarding rules for this account
     my @permit_opens = ();
-    my @local_ports = ();  # Track local ports for PermitListen
-    
+    my @local_ports  = ();    # Track local ports for PermitListen
+
     # 1. Personal port forwards
     my $personal_file = "/home/allowkeeper/$sysaccount/allowed.forward";
     if (-r $personal_file) {
@@ -149,10 +150,11 @@ foreach my $acc (@accounts_to_process) {
             foreach my $rule (@{$fnret->value}) {
                 my $permit_open = _generate_permit_open($rule);
                 if ($permit_open) {
-                    push @permit_opens, {
-                        line => $permit_open,
+                    push @permit_opens,
+                      {
+                        line   => $permit_open,
                         source => "personal access"
-                    };
+                      };
                     # Collect local port for PermitListen
                     if ($rule->{local_port} && $rule->{local_port} =~ /^\d+$/) {
                         push @local_ports, $rule->{local_port};
@@ -161,29 +163,30 @@ foreach my $acc (@accounts_to_process) {
             }
         }
     }
-    
+
     # 2. Group port forwards (through symlinks)
-    my $prefix = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
+    my $prefix        = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
     my @symlink_files = glob("/home/allowkeeper/$sysaccount/$prefix.forward.*");
     foreach my $symlink (@symlink_files) {
-        next unless -l $symlink;  # Only process symlinks
-        next unless -r $symlink;  # Must be readable
-        
+        next unless -l $symlink;    # Only process symlinks
+        next unless -r $symlink;    # Must be readable
+
         # Extract group name from symlink filename
         my $group_name = "";
         if ($symlink =~ /\Q$prefix\E\.(?:forward\.(.+)|partial\.(.+)\.forward)$/) {
             $group_name = $1 || $2;
         }
-        
+
         $fnret = OVH::Bastion::get_port_forwards_from_file(file => $symlink);
         if ($fnret && $fnret->value) {
             foreach my $rule (@{$fnret->value}) {
                 my $permit_open = _generate_permit_open($rule);
                 if ($permit_open) {
-                    push @permit_opens, {
-                        line => $permit_open,
+                    push @permit_opens,
+                      {
+                        line   => $permit_open,
                         source => $group_name ? "group $group_name" : "group access"
-                    };
+                      };
                     # Collect local port for PermitListen
                     if ($rule->{local_port} && $rule->{local_port} =~ /^\d+$/) {
                         push @local_ports, $rule->{local_port};
@@ -192,7 +195,7 @@ foreach my $acc (@accounts_to_process) {
             }
         }
     }
-    
+
     # Remove duplicates (merge sources for duplicate lines) and sort
     my %merged = ();
     foreach my $entry (@permit_opens) {
@@ -205,30 +208,31 @@ foreach my $acc (@accounts_to_process) {
             my %seen_sources = ();
             @existing_sources = grep { !$seen_sources{$_}++ } @existing_sources;
             $merged{$line} = join(", ", sort @existing_sources);
-        } else {
+        }
+        else {
             $merged{$line} = $entry->{source};
         }
     }
-    
+
     # Sort the PermitOpen lines
     my @sorted_lines = sort keys %merged;
-    
+
     # Remove duplicate local ports and sort
     my %seen_ports = ();
     @local_ports = grep { !$seen_ports{$_}++ } @local_ports;
     @local_ports = sort { $a <=> $b } @local_ports;
-    
+
     if (@sorted_lines) {
         # Get port forwarding configuration
         my $config_fnret = OVH::Bastion::load_configuration();
-        my $min_port = 20000;  # Default fallback
-        my $max_port = 65535;  # Default fallback
-        
+        my $min_port     = 20000;                                # Default fallback
+        my $max_port     = 65535;                                # Default fallback
+
         if ($config_fnret && $config_fnret->value) {
             $min_port = $config_fnret->value->{'portForwardingLocalPortMin'} || $min_port;
             $max_port = $config_fnret->value->{'portForwardingLocalPortMax'} || $max_port;
         }
-        
+
         # Generate config file
         my $config_content = "# SSH port forwarding config for user $acc\n";
         $config_content .= "# Generated automatically by osh-genSSHPFConfigs\n";
@@ -236,35 +240,36 @@ foreach my $acc (@accounts_to_process) {
         $config_content .= "Match User $acc\n";
         $config_content .= "    AllowTcpForwarding local\n";
         $config_content .= "    GatewayPorts no\n";
-        
+
         # Generate single PermitOpen line with only local listening ports
         my @local_permits = ();
-        
+
         # Add local listening ports (for the client side of the tunnel)
         if (@local_ports) {
             push @local_permits, map { "localhost:$_" } @local_ports;
         }
-        
+
         my $permit_destinations = join(' ', @local_permits);
         $config_content .= "    PermitOpen $permit_destinations\n";
-        
+
         # Add comments showing the source of each destination
         $config_content .= "#\n# Port forwarding configuration:\n";
         if (@local_ports) {
             $config_content .= "# Local listening ports: " . join(', ', @local_ports) . "\n";
         }
         $config_content .= "\n";
-        
+
         if (open(my $fh, '>', $config_file)) {
             print $fh $config_content;
             close($fh);
             chmod(0644, $config_file);
-            
+
             # Validate the generated config file syntax
             if (_validate_ssh_config_file($config_file)) {
                 $configs_generated++;
                 osh_debug("Generated SSH config for $acc with " . scalar(@local_ports) . " local port(s)");
-            } else {
+            }
+            else {
                 osh_warn("Generated SSH config for $acc failed validation, removing file");
                 unlink($config_file);
             }
@@ -288,7 +293,8 @@ osh_debug("Validating SSH configuration before reload...");
 my $validation_result = system("/usr/sbin/sshd", "-t");
 if ($validation_result != 0) {
     osh_warn("SSH configuration validation failed! Not reloading daemon to prevent service disruption.");
-    HEXIT('ERR_SSH_CONFIG_INVALID', msg => "SSH configuration validation failed. Generated configs may contain errors. Please check manually.");
+    HEXIT('ERR_SSH_CONFIG_INVALID',
+        msg => "SSH configuration validation failed. Generated configs may contain errors. Please check manually.");
 }
 osh_debug("SSH configuration validation passed");
 
@@ -310,7 +316,8 @@ if ($configs_removed > 0) {
 }
 if ($reload_result == 0) {
     $msg .= "SSH daemon reloaded successfully.";
-} else {
+}
+else {
     $msg .= "SSH daemon reload failed.";
 }
 
@@ -319,19 +326,19 @@ HEXIT('OK', msg => $msg);
 # Generate PermitOpen directive from port forward rule
 sub _generate_permit_open {
     my ($rule) = @_;
-    
+
     return unless $rule && ref($rule) eq 'HASH';
-    
-    my $remote_ip = $rule->{'remote_ip'};
+
+    my $remote_ip    = $rule->{'remote_ip'};
     my $forward_port = $rule->{'forward_port'};
-    
+
     return unless $remote_ip;
-    
+
     # Handle IPv6 addresses
     if ($remote_ip =~ /:/ && $remote_ip !~ /^\[.*\]$/) {
         $remote_ip = "[$remote_ip]";
     }
-    
+
     # Handle port wildcards
     if (!defined $forward_port || $forward_port eq '*') {
         return "$remote_ip:*";
@@ -344,32 +351,33 @@ sub _generate_permit_open {
 # Validate an individual SSH config file
 sub _validate_ssh_config_file {
     my ($config_file) = @_;
-    
+
     return 0 unless $config_file && -f $config_file;
-    
+
     # Use sshd -T with the specific config file to test syntax
     # We create a temporary minimal config that includes our file
     my $temp_config = "/tmp/sshd_test_" . $$ . ".conf";
-    
+
     # Untaint the temp filename
     if ($temp_config =~ /^(\/tmp\/sshd_test_\d+\.conf)$/) {
         $temp_config = $1;
-    } else {
+    }
+    else {
         return 0;
     }
-    
+
     if (open(my $fh, '>', $temp_config)) {
         print $fh "# Temporary config for validation\n";
-        print $fh "PidFile /dev/null\n";  # Prevent actual daemon startup
+        print $fh "PidFile /dev/null\n";    # Prevent actual daemon startup
         print $fh "Include $config_file\n";
         close($fh);
-        
+
         # Test the configuration syntax only, redirect stderr to capture host key warnings
         my $test_result = system("/usr/sbin/sshd -t -f $temp_config 2>/dev/null");
         unlink($temp_config);
-        
+
         return $test_result == 0;
     }
-    
+
     return 0;
 }

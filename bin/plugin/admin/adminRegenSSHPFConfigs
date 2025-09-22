@@ -9,12 +9,12 @@ use OVH::Bastion;
 use OVH::Bastion::Plugin qw( :DEFAULT help );
 
 my $remainingOptions = OVH::Bastion::Plugin::begin(
-    argv     => \@ARGV,
-    header   => "regenerate SSH port forwarding configurations",
-    options  => {
-        "account=s"      => \my $account,
-        "group=s"        => \my $group,
-        "all-accounts!"  => \my $all_accounts,
+    argv    => \@ARGV,
+    header  => "regenerate SSH port forwarding configurations",
+    options => {
+        "account=s"     => \my $account,
+        "group=s"       => \my $group,
+        "all-accounts!" => \my $all_accounts,
     },
     helptext => <<'EOF',
 Regenerate SSH port forwarding configurations
@@ -71,13 +71,13 @@ if ($account) {
     $fnret = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);
     $fnret or osh_exit $fnret;
     $account = $fnret->value->{'account'};
-    
+
     osh_info "Regenerating SSH port forwarding config for account $account...";
-    
+
     my @command = qw{ sudo -n -u root -- /usr/bin/env perl -T };
     push @command, $OVH::Bastion::BASEPATH . '/bin/helper/osh-genSSHPFConfigs';
     push @command, '--account', $account;
-    
+
     osh_exit OVH::Bastion::helper(cmd => \@command);
 }
 elsif ($group) {
@@ -88,21 +88,21 @@ elsif ($group) {
     $fnret = OVH::Bastion::is_valid_group_and_existing(group => $group, groupType => 'key');
     $fnret or osh_exit $fnret;
     my $shortGroup = $fnret->value->{'shortGroup'};
-    
+
     osh_info "Regenerating SSH port forwarding configs for all accounts with access to group $shortGroup...";
-    
+
     my @command = qw{ sudo -n -u root -- /usr/bin/env perl -T };
     push @command, $OVH::Bastion::BASEPATH . '/bin/helper/osh-regenSSHPFConfigsForGroup';
     push @command, '--group', $shortGroup;
-    
+
     osh_exit OVH::Bastion::helper(cmd => \@command);
 }
 elsif ($all_accounts) {
     osh_info "Regenerating SSH port forwarding configs for all accounts...";
-    
+
     my @command = qw{ sudo -n -u root -- /usr/bin/env perl -T };
     push @command, $OVH::Bastion::BASEPATH . '/bin/helper/osh-genSSHPFConfigs';
     push @command, '--all-accounts';
-    
+
     osh_exit OVH::Bastion::helper(cmd => \@command);
 }

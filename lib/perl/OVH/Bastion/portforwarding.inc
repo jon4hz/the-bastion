@@ -1,30 +1,29 @@
 # vim: set filetype=perl ts=4 sw=4 sts=4 et:
 package OVH::Bastion;
 
-
 use common::sense;
 
 use Time::Piece;    # $t->strftime
 
 # Get the configured port range for local port forwarding
 sub _get_port_range {
-    my $config = OVH::Bastion::load_configuration()->{value};
+    my $config   = OVH::Bastion::load_configuration()->{value};
     my $min_port = $config->{'portForwardingLocalPortMin'};
     my $max_port = $config->{'portForwardingLocalPortMax'};
-    
+
     # Validate port range
     if ($min_port < 1024 || $min_port > 65535 || $max_port < 1024 || $max_port > 65535 || $min_port >= $max_port) {
         return R('ERR_INVALID_CONFIGURATION', msg => "Invalid port forwarding port range: $min_port-$max_port");
     }
-    
-    return R('OK', value => { min => $min_port, max => $max_port });
+
+    return R('OK', value => {min => $min_port, max => $max_port});
 }
 
 # Get all currently allocated local ports from all users and groups
 sub _get_allocated_ports {
     my %allocated_ports;
     my %allocated_ids;
-    
+
     # Check all user port forward files
     my $fnret = OVH::Bastion::get_account_list();
     if ($fnret && $fnret->value) {
@@ -35,12 +34,12 @@ sub _get_allocated_ports {
                 if ($result && $result->value) {
                     my $ports = $result->value;
                     %allocated_ports = (%allocated_ports, %{$ports->{ports}});
-                    %allocated_ids = (%allocated_ids, %{$ports->{ids}});
+                    %allocated_ids   = (%allocated_ids,   %{$ports->{ids}});
                 }
             }
         }
     }
-    
+
     # Check all group port forward files
     $fnret = OVH::Bastion::get_group_list();
     if ($fnret && $fnret->value) {
@@ -51,13 +50,13 @@ sub _get_allocated_ports {
                 if ($result && $result->value) {
                     my $ports = $result->value;
                     %allocated_ports = (%allocated_ports, %{$ports->{ports}});
-                    %allocated_ids = (%allocated_ids, %{$ports->{ids}});
+                    %allocated_ids   = (%allocated_ids,   %{$ports->{ids}});
                 }
             }
         }
     }
-    
-    return R('OK', value => { ports => \%allocated_ports, ids => \%allocated_ids });
+
+    return R('OK', value => {ports => \%allocated_ports, ids => \%allocated_ids});
 }
 
 # Parse a port forwarding file to extract allocated ports and IDs
@@ -65,70 +64,71 @@ sub _parse_port_file {
     my ($file) = @_;
     my %ports;
     my %ids;
-    
+
     my $fh;
     if (!open($fh, '<', $file)) {
         return R('ERR_CANNOT_OPEN_FILE', msg => "Cannot open $file: $!");
     }
-    
+
     while (my $line = <$fh>) {
         chomp $line;
         next if $line =~ /^\s*#/ || $line =~ /^\s*$/;
-        
+
         # Parse line format: remote_ip:ssh_port:forward_port:remote_user:local_port:rule_id
         my @fields = split /:/, $line;
         if (@fields >= 6) {
             my $local_port = $fields[4];
-            my $rule_id = $fields[5];
-            
+            my $rule_id    = $fields[5];
+
             # Extract just the ID part (before any comments)
             $rule_id =~ s/\s.*$//;
-            
+
             if ($local_port =~ /^\d+$/ && $rule_id) {
                 $ports{$local_port} = 1;
-                $ids{$rule_id} = 1;
+                $ids{$rule_id}      = 1;
             }
         }
     }
     close($fh);
-    
-    return R('OK', value => { ports => \%ports, ids => \%ids });
+
+    return R('OK', value => {ports => \%ports, ids => \%ids});
 }
 
 # Generate a unique rule ID for a port forwarding rule
 sub _generate_rule_id {
     my ($allocated_ids) = @_;
-    
+
     # Generate a random 8-character alphanumeric ID
-    my @chars = ('a'..'z', 'A'..'Z', '0'..'9');
+    my @chars = ('a' .. 'z', 'A' .. 'Z', '0' .. '9');
     my $id;
     my $attempts = 0;
-    
-    do {
-        $id = join '', map { $chars[rand @chars] } 1..8;
-        $attempts++;
-    return R('ERR_PORT_ALLOCATION_FAILED', msg => "Could not generate unique port ID after $attempts attempts") if $attempts > 1000;
-} while (exists $allocated_ids->{$id});
 
-return R('OK', value => $id);
+    do {
+        $id = join '', map { $chars[rand @chars] } 1 .. 8;
+        $attempts++;
+        return R('ERR_PORT_ALLOCATION_FAILED', msg => "Could not generate unique port ID after $attempts attempts")
+          if $attempts > 1000;
+    } while (exists $allocated_ids->{$id});
+
+    return R('OK', value => $id);
 }
 
 # Check if a port is in use by the system using either ss or netstat
 sub _is_port_in_use {
     my ($port) = @_;
-    
+
     # Try ss first (modern systems)
     my $ss_test = `ss -ln 2>/dev/null | grep ":$port "`;
     if ($? == 0) {
-        return $ss_test ? 1 : 0;  # Return 1 if port is in use, 0 if free
+        return $ss_test ? 1 : 0;    # Return 1 if port is in use, 0 if free
     }
-    
+
     # Fallback to netstat (older systems)
     my $netstat_test = `netstat -ln 2>/dev/null | grep ":$port "`;
     if ($? == 0) {
-        return $netstat_test ? 1 : 0;  # Return 1 if port is in use, 0 if free
+        return $netstat_test ? 1 : 0;    # Return 1 if port is in use, 0 if free
     }
-    
+
     # If both commands fail, assume port is free (conservative approach)
     warn_syslog("Warning: Both 'ss' and 'netstat' commands failed, assuming port $port is free");
     return 0;
@@ -137,24 +137,24 @@ sub _is_port_in_use {
 # Check if a port forward rule already exists based on remote_ip, forward_port, and remote_user
 sub _check_existing_rule {
     my ($remote_ip, $forward_port, $remote_user) = @_;
-    
+
     # Get all existing port allocations to check against
     my $allocated_result = _get_allocated_ports();
     return $allocated_result unless $allocated_result->is_ok;
-    
+
     # Search through all port forwarding files for existing rules
     my $fnret = OVH::Bastion::get_account_list();
     if ($fnret && $fnret->is_ok) {
         foreach my $account (keys %{$fnret->value}) {
             # Check personal files
-            my $sys_account = $fnret->value->{$account}{'sysaccount'};
+            my $sys_account    = $fnret->value->{$account}{'sysaccount'};
             my @files_to_check = ("/home/allowkeeper/$sys_account/allowed.forward");
-            
+
             # Also check files with remote account prefixes
             foreach my $file (glob("/home/allowkeeper/$sys_account/allowed_*.forward")) {
                 push @files_to_check, $file;
             }
-            
+
             foreach my $file (@files_to_check) {
                 next unless -r $file;
                 if (open(my $fh, '<', $file)) {
@@ -162,31 +162,39 @@ sub _check_existing_rule {
                         chomp $line;
                         next if $line =~ /^\s*#/;
                         next if $line =~ /^\s*$/;
-                        
+
                         # Parse: remote_ip:ssh_port:forward_port:remote_user:local_port:rule_id
                         if ($line =~ m{^(\[[^\]]+\]|[^:]+):([^:]*):([^:]*):([^:]*):([^:]*):([^:\s]*)\s*}) {
-                            my ($file_remote_ip, $file_ssh_port, $file_forward_port, $file_remote_user, $file_local_port, $file_rule_id) = ($1, $2, $3, $4, $5, $6);
-                            
+                            my (
+                                $file_remote_ip,   $file_ssh_port,   $file_forward_port,
+                                $file_remote_user, $file_local_port, $file_rule_id
+                            ) = ($1, $2, $3, $4, $5, $6);
+
                             # Remove brackets from IPv6 addresses for comparison
                             $file_remote_ip =~ s/^\[|\]$//g;
                             my $check_remote_ip = $remote_ip;
                             $check_remote_ip =~ s/^\[|\]$//g;
-                            
+
                             # Handle wildcards
                             $file_forward_port = undef if $file_forward_port eq '*';
-                            $file_remote_user = undef if $file_remote_user eq '*';
-                            
+                            $file_remote_user  = undef if $file_remote_user eq '*';
+
                             # Check for exact match on the uniqueness criteria
-                            if ($file_remote_ip eq $check_remote_ip &&
-                                ($file_forward_port // '') eq ($forward_port // '') &&
-                                ($file_remote_user // '') eq ($remote_user // '')) {
+                            if (   $file_remote_ip eq $check_remote_ip
+                                && ($file_forward_port // '') eq ($forward_port // '')
+                                && ($file_remote_user  // '') eq ($remote_user  // ''))
+                            {
                                 close($fh);
-                                return R('OK', msg => "Rule already exists", value => {
-                                    file => $file,
-                                    line => $line,
-                                    local_port => $file_local_port,
-                                    rule_id => $file_rule_id
-                                });
+                                return R(
+                                    'OK',
+                                    msg   => "Rule already exists",
+                                    value => {
+                                        file       => $file,
+                                        line       => $line,
+                                        local_port => $file_local_port,
+                                        rule_id    => $file_rule_id
+                                    }
+                                );
                             }
                         }
                     }
@@ -195,44 +203,52 @@ sub _check_existing_rule {
             }
         }
     }
-    
+
     # Also check group files
     my $group_result = OVH::Bastion::get_group_list();
     if ($group_result && $group_result->is_ok) {
         foreach my $group (keys %{$group_result->value}) {
             my $file = "/home/$group/allowed.forward";
             next unless -r $file;
-            
+
             if (open(my $fh, '<', $file)) {
                 while (my $line = <$fh>) {
                     chomp $line;
                     next if $line =~ /^\s*#/;
                     next if $line =~ /^\s*$/;
-                    
+
                     # Parse: remote_ip:ssh_port:forward_port:remote_user:local_port:rule_id
                     if ($line =~ m{^(\[[^\]]+\]|[^:]+):([^:]*):([^:]*):([^:]*):([^:]*):([^:\s]*)\s*}) {
-                        my ($file_remote_ip, $file_ssh_port, $file_forward_port, $file_remote_user, $file_local_port, $file_rule_id) = ($1, $2, $3, $4, $5, $6);
-                        
+                        my (
+                            $file_remote_ip,   $file_ssh_port,   $file_forward_port,
+                            $file_remote_user, $file_local_port, $file_rule_id
+                        ) = ($1, $2, $3, $4, $5, $6);
+
                         # Remove brackets from IPv6 addresses for comparison
                         $file_remote_ip =~ s/^\[|\]$//g;
                         my $check_remote_ip = $remote_ip;
                         $check_remote_ip =~ s/^\[|\]$//g;
-                        
+
                         # Handle wildcards
                         $file_forward_port = undef if $file_forward_port eq '*';
-                        $file_remote_user = undef if $file_remote_user eq '*';
-                        
+                        $file_remote_user  = undef if $file_remote_user eq '*';
+
                         # Check for exact match on the uniqueness criteria
-                        if ($file_remote_ip eq $check_remote_ip &&
-                            ($file_forward_port // '') eq ($forward_port // '') &&
-                            ($file_remote_user // '') eq ($remote_user // '')) {
+                        if (   $file_remote_ip eq $check_remote_ip
+                            && ($file_forward_port // '') eq ($forward_port // '')
+                            && ($file_remote_user  // '') eq ($remote_user  // ''))
+                        {
                             close($fh);
-                            return R('OK', msg => "Rule already exists", value => {
-                                file => $file,
-                                line => $line,
-                                local_port => $file_local_port,
-                                rule_id => $file_rule_id
-                            });
+                            return R(
+                                'OK',
+                                msg   => "Rule already exists",
+                                value => {
+                                    file       => $file,
+                                    line       => $line,
+                                    local_port => $file_local_port,
+                                    rule_id    => $file_rule_id
+                                }
+                            );
                         }
                     }
                 }
@@ -240,54 +256,62 @@ sub _check_existing_rule {
             }
         }
     }
-    
+
     return R('KO_NOT_FOUND', msg => "Rule does not exist");
 }
 
 # Check if a port forward rule already exists in a specific file
 sub _check_existing_rule_in_file {
     my ($file, $remote_ip, $forward_port, $remote_user) = @_;
-    
+
     if (!-r $file) {
         return R('KO_NOT_FOUND', msg => "File not readable");
     }
-    
+
     if (open(my $fh, '<', $file)) {
         while (my $line = <$fh>) {
             chomp $line;
             next if $line =~ /^\s*#/;    # skip commented lines
             next if $line =~ /^\s*$/;    # skip empty lines
-            
+
             # Parse: remote_ip:ssh_port:forward_port:remote_user:local_port:rule_id
             if ($line =~ m{^(\[[^\]]+\]|[^:]+):([^:]*):([^:]*):([^:]*):([^:]*):([^:\s]*)\s*}) {
-                my ($file_remote_ip, $file_ssh_port, $file_forward_port, $file_remote_user, $file_local_port, $file_rule_id) = ($1, $2, $3, $4, $5, $6);
-                
+                my (
+                    $file_remote_ip,   $file_ssh_port,   $file_forward_port,
+                    $file_remote_user, $file_local_port, $file_rule_id
+                ) = ($1, $2, $3, $4, $5, $6);
+
                 # Remove brackets from IPv6 addresses for comparison
                 $file_remote_ip =~ s/^\[|\]$//g;
                 my $check_remote_ip = $remote_ip;
                 $check_remote_ip =~ s/^\[|\]$//g;
-                
+
                 # Handle wildcards
                 $file_forward_port = undef if $file_forward_port eq '*';
-                $file_remote_user = undef if $file_remote_user eq '*';
-                
+                $file_remote_user  = undef if $file_remote_user eq '*';
+
                 # Check for exact match on the uniqueness criteria
-                if ($file_remote_ip eq $check_remote_ip &&
-                    ($file_forward_port // '') eq ($forward_port // '') &&
-                    ($file_remote_user // '') eq ($remote_user // '')) {
+                if (   $file_remote_ip eq $check_remote_ip
+                    && ($file_forward_port // '') eq ($forward_port // '')
+                    && ($file_remote_user  // '') eq ($remote_user  // ''))
+                {
                     close($fh);
-                    return R('OK', msg => "Rule already exists", value => {
-                        file => $file,
-                        line => $line,
-                        local_port => $file_local_port,
-                        rule_id => $file_rule_id
-                    });
+                    return R(
+                        'OK',
+                        msg   => "Rule already exists",
+                        value => {
+                            file       => $file,
+                            line       => $line,
+                            local_port => $file_local_port,
+                            rule_id    => $file_rule_id
+                        }
+                    );
                 }
             }
         }
         close($fh);
     }
-    
+
     return R('KO_NOT_FOUND', msg => "Rule does not exist");
 }
 
@@ -295,23 +319,23 @@ sub _check_existing_rule_in_file {
 sub _allocate_local_port {
     my $range_result = _get_port_range();
     return $range_result unless $range_result;
-    
+
     my $min_port = $range_result->value->{min};
     my $max_port = $range_result->value->{max};
-    
+
     my $allocated_result = _get_allocated_ports();
     return $allocated_result unless $allocated_result;
-    
+
     my $allocated_ports = $allocated_result->value->{ports};
-    my $allocated_ids = $allocated_result->value->{ids};
-    
+    my $allocated_ids   = $allocated_result->value->{ids};
+
     # Try to find a free port (with some randomization to avoid conflicts)
-    my $attempts = 0;
-    my $max_attempts = ($max_port - $min_port + 1) * 2;  # Try twice the range size
-    
+    my $attempts     = 0;
+    my $max_attempts = ($max_port - $min_port + 1) * 2;    # Try twice the range size
+
     while ($attempts < $max_attempts) {
         my $port = $min_port + int(rand($max_port - $min_port + 1));
-        
+
         if (!exists $allocated_ports->{$port}) {
             # Check if port is actually available (not in use by system)
             if (_is_port_in_use($port)) {
@@ -319,19 +343,19 @@ sub _allocate_local_port {
                 $attempts++;
                 next;
             }
-            
+
             # Generate unique ID
             my $id_result = _generate_rule_id($allocated_ids);
             return $id_result unless $id_result;
-            
-            return R('OK', value => { port => $port, id => $id_result->value });
+
+            return R('OK', value => {port => $port, id => $id_result->value});
         }
         $attempts++;
     }
-    
-    return R('ERR_PORT_ALLOCATION_FAILED', msg => "Could not find a free port in range $min_port-$max_port after $attempts attempts");
-}
 
+    return R('ERR_PORT_ALLOCATION_FAILED',
+        msg => "Could not find a free port in range $min_port-$max_port after $attempts attempts");
+}
 
 # all port forwarding ACL modifications (on groups, on accounts, including group-guests) are handled here
 sub portforward_modify {
@@ -349,23 +373,23 @@ sub portforward_modify {
 
     my $action = $params{'action'};    # add or del
 
-    my $remote_user = $params{'remote_user'};    # can be undef or '*' for a user-wildcard access
-    my $remote_ip   = $params{'remote_ip'};      # can be a single ip or prefix
-    my $ssh_port    = $params{'ssh_port'};       # SSH server port (default 22)
-    my $forward_port = $params{'forward_port'};  # Port to forward through the tunnel
+    my $remote_user  = $params{'remote_user'};     # can be undef or '*' for a user-wildcard access
+    my $remote_ip    = $params{'remote_ip'};       # can be a single ip or prefix
+    my $ssh_port     = $params{'ssh_port'};        # SSH server port (default 22)
+    my $forward_port = $params{'forward_port'};    # Port to forward through the tunnel
 
     my $ttl     = $params{'ttl'};
     my $comment = $params{'comment'};
 
-    my $way     = $params{'way'};        # group, groupguest, personal
-    my $group   = $params{'group'};      # only for way=group or way=groupguest
-    my $account = $params{'account'};    # only for way=personal
+    my $way     = $params{'way'};                  # group, groupguest, personal
+    my $group   = $params{'group'};                # only for way=group or way=groupguest
+    my $account = $params{'account'};              # only for way=personal
 
     my $forceKey      = $params{'forceKey'};
     my $forcePassword = $params{'forcePassword'};
 
-    my $dryrun = $params{'dryrun'};      # don't do anything, just check params and prereqs
-    my $sudo   = $params{'sudo'};        # passed as-is to subs we use
+    my $dryrun = $params{'dryrun'};                # don't do anything, just check params and prereqs
+    my $sudo   = $params{'sudo'};                  # passed as-is to subs we use
 
     # deny accesses wider than these prefixes
     my %widestVxPrefix = (
@@ -392,8 +416,8 @@ sub portforward_modify {
 
     # normalize * into undef
     # also, due to how plugins work, sometimes remote_user and ports are just '', make them undef in those cases
-    undef $remote_user if (defined $remote_user && ($remote_user eq '*' || $remote_user eq ''));
-    undef $ssh_port if (defined $ssh_port && ($ssh_port eq '*' || $ssh_port eq ''));
+    undef $remote_user  if (defined $remote_user  && ($remote_user eq '*'  || $remote_user eq ''));
+    undef $ssh_port     if (defined $ssh_port     && ($ssh_port eq '*'     || $ssh_port eq ''));
     undef $forward_port if (defined $forward_port && ($forward_port eq '*' || $forward_port eq ''));
 
     # Default SSH port to 22 if not specified
@@ -575,69 +599,74 @@ sub portforward_modify {
     # For add operations, verify that the account has underlying SSH access to the destination
     if ($action eq 'add' && $way eq 'personal') {
         osh_debug("Checking if account $account has SSH access to $remote_ip:$ssh_port as user $remote_user");
-        
+
         # Check if the account has SSH access to this destination
         $fnret = OVH::Bastion::is_access_granted(
             account => $account,
             ip      => $remote_ip,
             port    => $ssh_port,
             user    => $remote_user,
-            ipfrom  => '127.0.0.1',  # Dummy IP since we're just checking access rules
+            ipfrom  => '127.0.0.1',    # Dummy IP since we're just checking access rules
         );
-        
+
         if (!$fnret) {
-            my $machine = OVH::Bastion::machine_display(ip => $remote_ip, port => $ssh_port, user => $remote_user)->value;
-            return R('ERR_ACCESS_DENIED', 
-                msg => "Account $account doesn't have SSH access to $machine. " .
-                       "Port forwarding access can only be granted to destinations where SSH access is already allowed.");
+            my $machine =
+              OVH::Bastion::machine_display(ip => $remote_ip, port => $ssh_port, user => $remote_user)->value;
+            return R('ERR_ACCESS_DENIED',
+                msg => "Account $account doesn't have SSH access to $machine. "
+                  . "Port forwarding access can only be granted to destinations where SSH access is already allowed.");
         }
-        
+
         osh_debug("SSH access validation passed for $account to $remote_ip:$ssh_port");
     }
-    
+
     # For group-based port forwards, check if there's group access to the destination
     if ($action eq 'add' && $way eq 'group') {
         osh_debug("Checking if group $shortGroup has SSH access to $remote_ip:$ssh_port as user $remote_user");
-        
+
         # Check if the group has SSH access to this destination
         $fnret = OVH::Bastion::is_access_way_granted(
-            ip       => $remote_ip,
-            port     => $ssh_port,
-            user     => $remote_user,
-            way      => 'group',
-            group    => $shortGroup,
+            ip    => $remote_ip,
+            port  => $ssh_port,
+            user  => $remote_user,
+            way   => 'group',
+            group => $shortGroup,
         );
-        
+
         if (!$fnret) {
-            my $machine = OVH::Bastion::machine_display(ip => $remote_ip, port => $ssh_port, user => $remote_user)->value;
-            return R('ERR_ACCESS_DENIED', 
-                msg => "Group $shortGroup doesn't have SSH access to $machine. " .
-                       "Port forwarding access can only be granted to destinations where SSH access is already allowed.");
+            my $machine =
+              OVH::Bastion::machine_display(ip => $remote_ip, port => $ssh_port, user => $remote_user)->value;
+            return R('ERR_ACCESS_DENIED',
+                msg => "Group $shortGroup doesn't have SSH access to $machine. "
+                  . "Port forwarding access can only be granted to destinations where SSH access is already allowed.");
         }
-        
+
         osh_debug("SSH access validation passed for group $shortGroup to $remote_ip:$ssh_port");
     }
-    
+
     # For groupguest port forwards, check if the account has access through the group
     if ($action eq 'add' && $way eq 'groupguest') {
-        osh_debug("Checking if account $account has SSH access through group $shortGroup to $remote_ip:$ssh_port as user $remote_user");
-        
+        osh_debug(
+            "Checking if account $account has SSH access through group $shortGroup to $remote_ip:$ssh_port as user $remote_user"
+        );
+
         # Check if the account has access to this group and the group has access to the destination
         $fnret = OVH::Bastion::is_access_granted(
             account => $account,
             ip      => $remote_ip,
             port    => $ssh_port,
             user    => $remote_user,
-            ipfrom  => '127.0.0.1',  # Dummy IP since we're just checking access rules
+            ipfrom  => '127.0.0.1',    # Dummy IP since we're just checking access rules
         );
-        
+
         if (!$fnret) {
-            my $machine = OVH::Bastion::machine_display(ip => $remote_ip, port => $ssh_port, user => $remote_user)->value;
-            return R('ERR_ACCESS_DENIED', 
-                msg => "Account $account doesn't have SSH access to $machine through group $shortGroup. " .
-                       "Port forwarding access can only be granted to destinations where SSH access is already allowed.");
+            my $machine =
+              OVH::Bastion::machine_display(ip => $remote_ip, port => $ssh_port, user => $remote_user)->value;
+            return R('ERR_ACCESS_DENIED',
+                msg => "Account $account doesn't have SSH access to $machine through group $shortGroup. "
+                  . "Port forwarding access can only be granted to destinations where SSH access is already allowed.");
         }
-        
+
         # Verify the access is through the specific group we're adding guest access for
         my $foundGroupAccess = 0;
         foreach my $grant (@{$fnret->value || []}) {
@@ -646,15 +675,18 @@ sub portforward_modify {
                 last;
             }
         }
-        
+
         if (!$foundGroupAccess) {
-            my $machine = OVH::Bastion::machine_display(ip => $remote_ip, port => $ssh_port, user => $remote_user)->value;
-            return R('ERR_ACCESS_DENIED', 
-                msg => "Account $account doesn't have SSH access to $machine specifically through group $shortGroup. " .
-                       "Guest port forwarding access can only be granted for destinations accessible through the specified group.");
+            my $machine =
+              OVH::Bastion::machine_display(ip => $remote_ip, port => $ssh_port, user => $remote_user)->value;
+            return R('ERR_ACCESS_DENIED',
+                msg => "Account $account doesn't have SSH access to $machine specifically through group $shortGroup. "
+                  . "Guest port forwarding access can only be granted for destinations accessible through the specified group."
+            );
         }
-        
-        osh_debug("SSH access validation passed for account $account through group $shortGroup to $remote_ip:$ssh_port");
+
+        osh_debug(
+            "SSH access validation passed for account $account through group $shortGroup to $remote_ip:$ssh_port");
     }
 
     if ($action ne 'clear') {
@@ -670,7 +702,7 @@ sub portforward_modify {
             way          => $way,
             group        => $shortGroup,
             account      => $account,
-            exactMatch   => 1,             # we're checking if the exact right we're asked to modify exists or not
+            exactMatch   => 1,               # we're checking if the exact right we're asked to modify exists or not
         );
         osh_debug("... result is $fnret");
 
@@ -678,7 +710,8 @@ sub portforward_modify {
             return R('OK_NO_CHANGE', msg => "The requested port forward access to add was already granted");
         }
         elsif ($action eq 'del' and not $fnret) {
-            return R('OK_NO_CHANGE', msg => "The requested port forward access to delete was not found, no change made");
+            return R('OK_NO_CHANGE',
+                msg => "The requested port forward access to delete was not found, no change made");
         }
     }
 
@@ -729,9 +762,9 @@ sub portforward_modify {
 
         # build the line we're either adding or looking for (to delete it)
         my $entry = (index($remote_ip, ':') >= 0 ? "[$remote_ip]" : $remote_ip);
-        $entry .= ':' . ($ssh_port || '*');
+        $entry .= ':' . ($ssh_port     || '*');
         $entry .= ':' . ($forward_port || '*');
-        $entry .= ':' . ($remote_user || '*');
+        $entry .= ':' . ($remote_user  || '*');
 
         my $local_port;
         my $rule_id;
@@ -742,17 +775,17 @@ sub portforward_modify {
             if ($existing_check && $existing_check->is_ok) {
                 return R('ERR_ALREADY_EXISTING', msg => "This port forward rule already exists");
             }
-            
+
             # Allocate a unique local port and ID for new entries
             my $allocation_result = _allocate_local_port();
             if (!$allocation_result) {
                 warn_syslog("Port allocation failed: " . $allocation_result->msg);
                 return $allocation_result;
             }
-            
+
             $local_port = $allocation_result->value->{port};
-            $rule_id = $allocation_result->value->{id};
-            
+            $rule_id    = $allocation_result->value->{id};
+
             $entry .= ':' . $local_port;
             $entry .= ':' . $rule_id;
         }
@@ -798,10 +831,11 @@ sub portforward_modify {
             else {
                 return R('ERR_CANNOT_OPEN_FILE', msg => "Error opening $file: $!");
             }
-            my $machine = "$remote_ip:" . ($ssh_port || '*') . "->" . ($forward_port || '*') . " (" . ($remote_user || '*') . ")";
+            my $machine =
+              "$remote_ip:" . ($ssh_port || '*') . "->" . ($forward_port || '*') . " (" . ($remote_user || '*') . ")";
             my $ttlmsg =
               $ttl ? (' (expires in ' . OVH::Bastion::duration2human(seconds => $ttl)->value->{'human'} . ')') : '';
-            
+
             $returnmsg = "Port forward access to $machine successfully added$ttlmsg";
             if ($local_port && $rule_id) {
                 $returnmsg .= " [Local port: $local_port, ID: $rule_id]";
@@ -811,38 +845,38 @@ sub portforward_modify {
             # For deletion, we can match either:
             # 1. By the first 4 fields (remote_ip:ssh_port:forward_port:remote_user) - traditional way
             # 2. By rule_id if provided in the params
-            my $search_pattern = quotemeta($entry);
+            my $search_pattern    = quotemeta($entry);
             my $rule_id_to_delete = $params{'rule_id'};
-            
+
             if (open(my $fh_file, '<', $file)) {
                 my $newFile;
                 my $found = 0;
                 while (my $line = <$fh_file>) {
                     chomp $line;
-                    
+
                     # Skip comment lines
                     if ($line =~ /^\s*#/ || $line =~ /^\s*$/) {
                         $newFile .= $line . "\n";
                         next;
                     }
-                    
+
                     my $should_delete = 0;
-                    
+
                     # Parse the line to check for matches
-                    my @fields = split /:/, $line, 7;  # Split into max 7 parts to handle comments
-                    
+                    my @fields = split /:/, $line, 7;    # Split into max 7 parts to handle comments
+
                     if (@fields >= 6) {
                         # Check for rule ID match if rule_id was provided
                         if ($rule_id_to_delete) {
                             my $line_rule_id = $fields[5];
-                            $line_rule_id =~ s/\s.*$//;  # Remove any trailing comments
+                            $line_rule_id =~ s/\s.*$//;    # Remove any trailing comments
                             if ($line_rule_id eq $rule_id_to_delete) {
                                 $should_delete = 1;
                             }
                         }
                         else {
                             # Traditional match on first 4 fields
-                            my $line_entry = join ':', @fields[0..3];
+                            my $line_entry = join ':', @fields[0 .. 3];
                             if ($line_entry eq $entry) {
                                 $should_delete = 1;
                             }
@@ -850,19 +884,20 @@ sub portforward_modify {
                     }
                     elsif (@fields >= 4 && !$rule_id_to_delete) {
                         # Fallback for old format entries (without local_port:rule_id)
-                        my $line_entry = join ':', @fields[0..3];
+                        my $line_entry = join ':', @fields[0 .. 3];
                         if ($line_entry eq $entry) {
                             $should_delete = 1;
                         }
                     }
-                    
+
                     if ($should_delete) {
                         # Found matching entry, comment it out
-                        my $comment_text = $comment ? $comment : "removed by " . $ENV{'SUDO_USER'} . " on " . localtime(time);
+                        my $comment_text =
+                          $comment ? $comment : "removed by " . $ENV{'SUDO_USER'} . " on " . localtime(time);
                         $line = "# $line # $comment_text";
                         $found++;
                     }
-                    
+
                     $newFile .= $line . "\n";
                 }
                 close($fh_file);
@@ -876,7 +911,11 @@ sub portforward_modify {
                             $returnmsg = "Port forward rule with ID $rule_id_to_delete successfully removed";
                         }
                         else {
-                            my $machine = "$remote_ip:" . ($ssh_port || '*') . "->" . ($forward_port || '*') . " (" . ($remote_user || '*') . ")";
+                            my $machine =
+                                "$remote_ip:"
+                              . ($ssh_port     || '*') . "->"
+                              . ($forward_port || '*') . " ("
+                              . ($remote_user  || '*') . ")";
                             $returnmsg = "Port forward access to $machine successfully removed";
                         }
                     }
@@ -898,20 +937,20 @@ sub portforward_modify {
             severity => 'info',
             type     => 'portforward',
             fields   => [
-                ['action',       $params{'action'}],
-                ['type',         $params{'way'}],
-                ['group',        $shortGroup],
-                ['account',      $params{'account'}],
-                ['remote_user',  $params{'remote_user'}],
-                ['remote_ip',    $params{'remote_ip'}],
-                ['ssh_port',     $params{'ssh_port'}],
-                ['forward_port', $params{'forward_port'}],
-                ['local_port',   $local_port],
-                ['rule_id',      $rule_id],
-                ['ttl',          $params{'ttl'}],
-                ['comment',      $params{'comment'}],
-                ['forceKey',     $params{'forceKey'}],
-                ['forcePassword',$params{'forcePassword'}],
+                ['action',        $params{'action'}],
+                ['type',          $params{'way'}],
+                ['group',         $shortGroup],
+                ['account',       $params{'account'}],
+                ['remote_user',   $params{'remote_user'}],
+                ['remote_ip',     $params{'remote_ip'}],
+                ['ssh_port',      $params{'ssh_port'}],
+                ['forward_port',  $params{'forward_port'}],
+                ['local_port',    $local_port],
+                ['rule_id',       $rule_id],
+                ['ttl',           $params{'ttl'}],
+                ['comment',       $params{'comment'}],
+                ['forceKey',      $params{'forceKey'}],
+                ['forcePassword', $params{'forcePassword'}],
             ]
         );
         return R('OK', msg => $returnmsg) if $returnmsg;
@@ -929,7 +968,9 @@ sub portforward_modify {
         $ret = $_portforward_modify_file->(%params, file => "/home/$group/allowed.forward");
     }
     elsif ($way eq 'groupguest') {
-        $ret = $_portforward_modify_file->(%params, file => "/home/allowkeeper/$sysaccount/$prefix.partial.$shortGroup.forward");
+        $ret = $_portforward_modify_file->(
+            %params, file => "/home/allowkeeper/$sysaccount/$prefix.partial.$shortGroup.forward"
+        );
     }
     osh_debug("_portforward_modify_file() said $ret");
     return $ret if defined $ret;
@@ -951,19 +992,19 @@ sub is_portforward_way_granted {
         return R('ERR_FORBIDDEN', msg => "Port forwarding feature is disabled on this bastion");
     }
 
-    my $remote_user = $params{'remote_user'};    # can be undef for a user-wildcard
-    my $remote_ip   = $params{'remote_ip'};      # mandatory
-    my $ssh_port    = $params{'ssh_port'};       # SSH server port (default 22)
-    my $forward_port = $params{'forward_port'};  # Port to forward through the tunnel
-    
+    my $remote_user  = $params{'remote_user'};     # can be undef for a user-wildcard
+    my $remote_ip    = $params{'remote_ip'};       # mandatory
+    my $ssh_port     = $params{'ssh_port'};        # SSH server port (default 22)
+    my $forward_port = $params{'forward_port'};    # Port to forward through the tunnel
+
     # For backward compatibility, also support remote_port parameter
-    my $remote_port = $params{'remote_port'};    # can be undef for a port-wildcard
+    my $remote_port = $params{'remote_port'};      # can be undef for a port-wildcard
 
-    my $way     = $params{'way'};        # group, groupguest, personal
-    my $group   = $params{'group'};      # only for way=group or way=groupguest (needs to be shortGroup!)
-    my $account = $params{'account'};    # only for way=personal or way=groupguest
+    my $way     = $params{'way'};                  # group, groupguest, personal
+    my $group   = $params{'group'};                # only for way=group or way=groupguest (needs to be shortGroup!)
+    my $account = $params{'account'};              # only for way=personal or way=groupguest
 
-    my $exactMatch = $params{'exactMatch'};    # if true, look for the EXACT access we want, don't do any wildcarding
+    my $exactMatch = $params{'exactMatch'};        # if true, look for the EXACT access we want, don't do any wildcarding
 
     my $fnret;
 
@@ -974,12 +1015,13 @@ sub is_portforward_way_granted {
     my $prefix = "allowed";
 
     if ($way eq 'personal') {
-        $fnret = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account, accountType => 'normal', cache => 1);
+        $fnret =
+          OVH::Bastion::is_bastion_account_valid_and_existing(account => $account, accountType => 'normal', cache => 1);
         $fnret or return $fnret;
         my $sysaccount = $fnret->value->{'sysaccount'};
         $remoteaccount = $fnret->value->{'remoteaccount'};
-        $prefix = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
-        $file = "/home/allowkeeper/$sysaccount/$prefix.forward";
+        $prefix        = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
+        $file          = "/home/allowkeeper/$sysaccount/$prefix.forward";
     }
     elsif ($way eq 'group') {
         $fnret = OVH::Bastion::is_valid_group_and_existing(group => $group, groupType => 'key', cache => 1);
@@ -988,12 +1030,13 @@ sub is_portforward_way_granted {
         $file = "/home/$sysgroup/allowed.forward";
     }
     elsif ($way eq 'groupguest') {
-        $fnret = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account, accountType => 'normal', cache => 1);
+        $fnret =
+          OVH::Bastion::is_bastion_account_valid_and_existing(account => $account, accountType => 'normal', cache => 1);
         $fnret or return $fnret;
         my $sysaccount = $fnret->value->{'sysaccount'};
         $remoteaccount = $fnret->value->{'remoteaccount'};
-        $prefix = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
-        $file = "/home/allowkeeper/$sysaccount/$prefix.partial.$group.forward";
+        $prefix        = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
+        $file          = "/home/allowkeeper/$sysaccount/$prefix.partial.$group.forward";
     }
     else {
         return R('ERR_INVALID_PARAMETER', msg => "Invalid way '$way'");
@@ -1007,25 +1050,33 @@ sub is_portforward_way_granted {
 
             # parse: remote_ip:ssh_port:forward_port:remote_user:local_port:rule_id [comment]
             if ($line =~ m{^(\[[^\]]+\]|[^:]+):([^:]*):([^:]*):([^:]*):([^:]*):([^:\s]*)\s*(?:#.*)?$}) {
-                my ($file_remote_ip, $file_ssh_port, $file_forward_port, $file_remote_user, $file_local_port, $file_rule_id) = ($1, $2, $3, $4, $5, $6);
+                my (
+                    $file_remote_ip,   $file_ssh_port,   $file_forward_port,
+                    $file_remote_user, $file_local_port, $file_rule_id
+                ) = ($1, $2, $3, $4, $5, $6);
 
                 # remove brackets from IPv6 addresses
                 $file_remote_ip =~ s/^\[|\]$//g;
 
                 # handle wildcards
-                $file_ssh_port = undef if $file_ssh_port eq '*';
+                $file_ssh_port     = undef if $file_ssh_port eq '*';
                 $file_forward_port = undef if $file_forward_port eq '*';
-                $file_remote_user = undef if $file_remote_user eq '*';
+                $file_remote_user  = undef if $file_remote_user eq '*';
 
-                print "DEBUG: checking line '$line' -> ip='$file_remote_ip', ssh_port='" . (defined $file_ssh_port ? $file_ssh_port : '<any>') . "', forward_port='" . (defined $file_forward_port ? $file_forward_port : '<any>') . "', user='" . (defined $file_remote_user ? $file_remote_user : '<any>') . "'\n"
+                print "DEBUG: checking line '$line' -> ip='$file_remote_ip', ssh_port='"
+                  . (defined $file_ssh_port ? $file_ssh_port : '<any>')
+                  . "', forward_port='"
+                  . (defined $file_forward_port ? $file_forward_port : '<any>')
+                  . "', user='"
+                  . (defined $file_remote_user ? $file_remote_user : '<any>') . "'\n"
                   if osh_debug();
 
                 if ($exactMatch) {
                     # exact match required - compare ssh_port and forward_port
                     if (   ($file_remote_ip eq $remote_ip)
-                        && (($file_ssh_port // '') eq ($ssh_port // ''))
+                        && (($file_ssh_port     // '') eq ($ssh_port     // ''))
                         && (($file_forward_port // '') eq ($forward_port // ''))
-                        && (($file_remote_user // '') eq ($remote_user // '')))
+                        && (($file_remote_user  // '') eq ($remote_user  // '')))
                     {
                         close($fh);
                         return R('OK', value => {file => $file, line => $line});
@@ -1033,11 +1084,13 @@ sub is_portforward_way_granted {
                 }
                 else {
                     # check if the requested access matches this line (with wildcards)
-                    my $ip_match = _check_ip_match($remote_ip, $file_remote_ip);
+                    my $ip_match       = _check_ip_match($remote_ip, $file_remote_ip);
                     my $ssh_port_match = (!defined $file_ssh_port || !defined $ssh_port || $file_ssh_port eq $ssh_port);
-                    my $forward_port_match = (!defined $file_forward_port || !defined $forward_port || $file_forward_port eq $forward_port);
-                    my $user_match = (!defined $file_remote_user || !defined $remote_user || $file_remote_user eq $remote_user);
-                    
+                    my $forward_port_match =
+                      (!defined $file_forward_port || !defined $forward_port || $file_forward_port eq $forward_port);
+                    my $user_match =
+                      (!defined $file_remote_user || !defined $remote_user || $file_remote_user eq $remote_user);
+
                     # For backward compatibility, also check remote_port if provided
                     my $remote_port_match = 1;
                     if (defined $remote_port) {
@@ -1046,7 +1099,17 @@ sub is_portforward_way_granted {
 
                     if ($ip_match && $ssh_port_match && $forward_port_match && $user_match && $remote_port_match) {
                         close($fh);
-                        return R('OK', value => {file => $file, line => $line, ip => $file_remote_ip, ssh_port => $file_ssh_port, forward_port => $file_forward_port, user => $file_remote_user});
+                        return R(
+                            'OK',
+                            value => {
+                                file         => $file,
+                                line         => $line,
+                                ip           => $file_remote_ip,
+                                ssh_port     => $file_ssh_port,
+                                forward_port => $file_forward_port,
+                                user         => $file_remote_user
+                            }
+                        );
                     }
                 }
             }
@@ -1098,70 +1161,71 @@ sub get_portforward_acls {
         return R('ERR_FORBIDDEN', msg => "Port forwarding feature is disabled on this bastion");
     }
 
-# Read port forwarding rules from a file
-sub get_port_forwards_from_file {
-    my %params = @_;
-    my $file = $params{'file'};
-    
-    return R('ERR_MISSING_PARAMETER', msg => "Missing file parameter") unless $file;
-    return R('ERR_FILE_NOT_FOUND', msg => "File not found or not readable") unless -r $file;
-    
-    my @rules = ();
-    
-    if (open(my $fh, '<', $file)) {
-        while (my $line = <$fh>) {
-            chomp $line;
-            next if $line =~ /^\s*#/;    # skip commented lines
-            next if $line =~ /^\s*$/;    # skip empty lines
-            
-            # parse: remote_ip:ssh_port:forward_port:remote_user:local_port:rule_id [comment]
-            if ($line =~ m{^(\[[^\]]+\]|[^:]+):([^:]*):([^:]*):([^:]*):([^:]*):([^:\s]*)\s*(?:#\s*(.*))?$}) {
-                my ($remote_ip, $ssh_port, $forward_port, $remote_user, $local_port, $rule_id, $comment_part) = ($1, $2, $3, $4, $5, $6, $7);
+    # Read port forwarding rules from a file
+    sub get_port_forwards_from_file {
+        my %params = @_;
+        my $file   = $params{'file'};
 
-                # remove brackets from IPv6 addresses
-                $remote_ip =~ s/^\[|\]$//g;
+        return R('ERR_MISSING_PARAMETER', msg => "Missing file parameter")         unless $file;
+        return R('ERR_FILE_NOT_FOUND',    msg => "File not found or not readable") unless -r $file;
 
-                # handle wildcards
-                $ssh_port = undef if $ssh_port eq '*';
-                $forward_port = undef if $forward_port eq '*';
-                $remote_user = undef if $remote_user eq '*';
+        my @rules = ();
 
-                my %entry = (
-                    remote_ip    => $remote_ip,
-                    ssh_port     => $ssh_port,
-                    forward_port => $forward_port,
-                    remote_user  => $remote_user,
-                    local_port   => $local_port,
-                    rule_id      => $rule_id,
-                );
-                
-                # Parse additional info from comments
-                if ($comment_part) {
-                    if ($comment_part =~ /COMMENT=<([^>]+)>/) {
-                        $entry{'comment'} = $1;
+        if (open(my $fh, '<', $file)) {
+            while (my $line = <$fh>) {
+                chomp $line;
+                next if $line =~ /^\s*#/;    # skip commented lines
+                next if $line =~ /^\s*$/;    # skip empty lines
+
+                # parse: remote_ip:ssh_port:forward_port:remote_user:local_port:rule_id [comment]
+                if ($line =~ m{^(\[[^\]]+\]|[^:]+):([^:]*):([^:]*):([^:]*):([^:]*):([^:\s]*)\s*(?:#\s*(.*))?$}) {
+                    my ($remote_ip, $ssh_port, $forward_port, $remote_user, $local_port, $rule_id, $comment_part) =
+                      ($1, $2, $3, $4, $5, $6, $7);
+
+                    # remove brackets from IPv6 addresses
+                    $remote_ip =~ s/^\[|\]$//g;
+
+                    # handle wildcards
+                    $ssh_port     = undef if $ssh_port eq '*';
+                    $forward_port = undef if $forward_port eq '*';
+                    $remote_user  = undef if $remote_user eq '*';
+
+                    my %entry = (
+                        remote_ip    => $remote_ip,
+                        ssh_port     => $ssh_port,
+                        forward_port => $forward_port,
+                        remote_user  => $remote_user,
+                        local_port   => $local_port,
+                        rule_id      => $rule_id,
+                    );
+
+                    # Parse additional info from comments
+                    if ($comment_part) {
+                        if ($comment_part =~ /COMMENT=<([^>]+)>/) {
+                            $entry{'comment'} = $1;
+                        }
+                        if ($comment_part =~ /EXPIRY=(\d+)/) {
+                            $entry{'expiry'} = $1;
+                        }
+                        if ($comment_part =~ /FORCEKEY=(\S+)/) {
+                            $entry{'force_key'} = $1;
+                        }
+                        if ($comment_part =~ /FORCEPASSWORD=(\S+)/) {
+                            $entry{'force_password'} = $1;
+                        }
                     }
-                    if ($comment_part =~ /EXPIRY=(\d+)/) {
-                        $entry{'expiry'} = $1;
-                    }
-                    if ($comment_part =~ /FORCEKEY=(\S+)/) {
-                        $entry{'force_key'} = $1;
-                    }
-                    if ($comment_part =~ /FORCEPASSWORD=(\S+)/) {
-                        $entry{'force_password'} = $1;
-                    }
+
+                    push @rules, \%entry;
                 }
-                
-                push @rules, \%entry;
             }
+            close($fh);
         }
-        close($fh);
+        else {
+            return R('ERR_CANNOT_OPEN_FILE', msg => "Cannot open file $file: $!");
+        }
+
+        return R('OK', value => \@rules);
     }
-    else {
-        return R('ERR_CANNOT_OPEN_FILE', msg => "Cannot open file $file: $!");
-    }
-    
-    return R('OK', value => \@rules);
-}
 
     my $fnret;
     my @acls;
@@ -1181,17 +1245,17 @@ sub get_port_forwards_from_file {
     $fnret = OVH::Bastion::get_user_groups(account => $account, groupType => 'key');
     if ($fnret) {
         foreach my $groupHashRef (@{$fnret->value}) {
-            my $group = $groupHashRef->{'group'};
+            my $group      = $groupHashRef->{'group'};
             my $shortGroup = $group;
             $shortGroup =~ s/^key//;
-            my $grantedGroupViaMembership =
-              OVH::Bastion::get_portforward_acl_way(way => 'group', group => $shortGroup);
+            my $grantedGroupViaMembership = OVH::Bastion::get_portforward_acl_way(way => 'group', group => $shortGroup);
             if ($grantedGroupViaMembership && @{$grantedGroupViaMembership->value || []}) {
-                push @acls, {
+                push @acls,
+                  {
                     type  => 'group-member',
                     group => $shortGroup,
                     acl   => $grantedGroupViaMembership->value
-                };
+                  };
             }
         }
     }
@@ -1200,17 +1264,18 @@ sub get_port_forwards_from_file {
     $fnret = OVH::Bastion::get_user_groups(account => $account, groupType => 'key');
     if ($fnret) {
         foreach my $groupHashRef (@{$fnret->value}) {
-            my $group = $groupHashRef->{'group'};
+            my $group      = $groupHashRef->{'group'};
             my $shortGroup = $group;
             $shortGroup =~ s/^key//;
             my $grantedGroupViaGuest =
               OVH::Bastion::get_portforward_acl_way(way => 'groupguest', group => $shortGroup, account => $account);
             if ($grantedGroupViaGuest && @{$grantedGroupViaGuest->value || []}) {
-                push @acls, {
+                push @acls,
+                  {
                     type  => 'group-guest',
                     group => $shortGroup,
                     acl   => $grantedGroupViaGuest->value
-                };
+                  };
             }
         }
     }
@@ -1228,12 +1293,14 @@ sub get_portforward_acl_way {
     my $fnret;
 
     if ($way eq 'personal') {
-        $fnret = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account, accountType => 'normal', cache => 1);
+        $fnret =
+          OVH::Bastion::is_bastion_account_valid_and_existing(account => $account, accountType => 'normal', cache => 1);
         $fnret or return $fnret;
-        my $sysaccount = $fnret->value->{'sysaccount'};
+        my $sysaccount    = $fnret->value->{'sysaccount'};
         my $remoteaccount = $fnret->value->{'remoteaccount'};
-        my $prefix = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
-        $fnret = OVH::Bastion::get_portforward_acl_way_from_file(file => "/home/allowkeeper/$sysaccount/$prefix.forward");
+        my $prefix        = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
+        $fnret =
+          OVH::Bastion::get_portforward_acl_way_from_file(file => "/home/allowkeeper/$sysaccount/$prefix.forward");
     }
     elsif ($way eq 'group') {
         $fnret = OVH::Bastion::is_valid_group_and_existing(group => $group, groupType => 'key', cache => 1);
@@ -1242,12 +1309,14 @@ sub get_portforward_acl_way {
         $fnret = OVH::Bastion::get_portforward_acl_way_from_file(file => "/home/$sysgroup/allowed.forward");
     }
     elsif ($way eq 'groupguest') {
-        $fnret = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account, accountType => 'normal', cache => 1);
+        $fnret =
+          OVH::Bastion::is_bastion_account_valid_and_existing(account => $account, accountType => 'normal', cache => 1);
         $fnret or return $fnret;
-        my $sysaccount = $fnret->value->{'sysaccount'};
+        my $sysaccount    = $fnret->value->{'sysaccount'};
         my $remoteaccount = $fnret->value->{'remoteaccount'};
-        my $prefix = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
-        $fnret = OVH::Bastion::get_portforward_acl_way_from_file(file => "/home/allowkeeper/$sysaccount/$prefix.partial.$group.forward");
+        my $prefix        = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
+        $fnret = OVH::Bastion::get_portforward_acl_way_from_file(
+            file => "/home/allowkeeper/$sysaccount/$prefix.partial.$group.forward");
     }
     else {
         return R('ERR_INVALID_PARAMETER', msg => "Invalid way '$way'");
@@ -1272,15 +1341,16 @@ sub get_portforward_acl_way_from_file {
 
             # parse: remote_ip:ssh_port:forward_port:remote_user:local_port:rule_id [comment]
             if ($line =~ m{^(\[[^\]]+\]|[^:]+):([^:]*):([^:]*):([^:]*):([^:]*):([^:\s]*)\s*(?:#\s*(.*))?$}) {
-                my ($remote_ip, $ssh_port, $forward_port, $remote_user, $local_port, $rule_id, $comment_part) = ($1, $2, $3, $4, $5, $6, $7);
+                my ($remote_ip, $ssh_port, $forward_port, $remote_user, $local_port, $rule_id, $comment_part) =
+                  ($1, $2, $3, $4, $5, $6, $7);
 
                 # remove brackets from IPv6 addresses
                 $remote_ip =~ s/^\[|\]$//g;
 
                 # handle wildcards
-                $ssh_port = undef if $ssh_port eq '*';
+                $ssh_port     = undef if $ssh_port eq '*';
                 $forward_port = undef if $forward_port eq '*';
-                $remote_user = undef if $remote_user eq '*';
+                $remote_user  = undef if $remote_user eq '*';
 
                 my %entry = (
                     remote_ip    => $remote_ip,
@@ -1294,7 +1364,7 @@ sub get_portforward_acl_way_from_file {
                 # parse comment for additional metadata
                 if ($comment_part) {
                     if ($comment_part =~ /add by (\S+) on ([^#]+)/) {
-                        $entry{'addedBy'} = $1;
+                        $entry{'addedBy'}   = $1;
                         $entry{'addedDate'} = $2;
                     }
                     if ($comment_part =~ /TTL=([^#\s]+)/) {
@@ -1330,9 +1400,10 @@ sub print_portforward_acls {
     # also take this opportunity to remember the longest field for each column
     my @printRows;
     my @jsonRows;
-    my @columnNames       = qw( REMOTE-HOST SSH-PORT FORWARD-PORT REMOTE-USER LOCAL-PORT RULE-ID ACCESS-BY ADDED-BY ADDED-AT COMMENT);
+    my @columnNames =
+      qw( REMOTE-HOST SSH-PORT FORWARD-PORT REMOTE-USER LOCAL-PORT RULE-ID ACCESS-BY ADDED-BY ADDED-AT COMMENT);
     my @printColumnLength = map { length } @columnNames;
-    
+
     foreach my $contextAcl (@$acls) {
         my $type  = $contextAcl->{'type'};
         my $group = $contextAcl->{'group'};
@@ -1353,11 +1424,11 @@ sub print_portforward_acls {
 
             my @row = (
                 $ipReverse ? $ipReverse : $entry->{'remote_ip'},
-                $entry->{'ssh_port'} || '*',
+                $entry->{'ssh_port'}     || '*',
                 $entry->{'forward_port'} || '*',
-                $entry->{'remote_user'} || '*',
-                $entry->{'local_port'} || '-',
-                $entry->{'rule_id'} || '-',
+                $entry->{'remote_user'}  || '*',
+                $entry->{'local_port'}   || '-',
+                $entry->{'rule_id'}      || '-',
                 $accessType,
                 $addedBy,
                 $addedDate,

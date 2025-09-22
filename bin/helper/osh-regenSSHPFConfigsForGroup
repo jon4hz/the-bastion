@@ -20,9 +20,7 @@ my ($result, @optwarns);
 my ($group);
 eval {
     local $SIG{__WARN__} = sub { push @optwarns, shift };
-    $result = GetOptions(
-        "group=s" => sub { $group //= $_[1] },
-    );
+    $result = GetOptions("group=s" => sub { $group //= $_[1] },);
 };
 if ($@) { die $@ }
 
@@ -80,20 +78,20 @@ if (!$fnret) {
 foreach my $account (keys %{$fnret->value}) {
     # Skip system accounts
     next if $account =~ /^(root|bastionsync|healthcheck|keykeeper|keyreader|allowkeeper|proxyhttp)$/;
-    
+
     # Check if this account has a symlink to the group's port forward file
     my $account_info = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);
     next unless $account_info;
-    
-    my $sysaccount = $account_info->value->{'sysaccount'};
+
+    my $sysaccount    = $account_info->value->{'sysaccount'};
     my $remoteaccount = $account_info->value->{'remoteaccount'};
-    
-    my $prefix = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
+
+    my $prefix             = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
     my @potential_symlinks = (
         "/home/allowkeeper/$sysaccount/$prefix.forward.$shortGroup",
         "/home/allowkeeper/$sysaccount/$prefix.partial.$shortGroup.forward"
     );
-    
+
     my $has_group_access = 0;
     foreach my $symlink (@potential_symlinks) {
         if (-l $symlink && -r $symlink) {
@@ -101,27 +99,30 @@ foreach my $account (keys %{$fnret->value}) {
             last;
         }
     }
-    
+
     if ($has_group_access) {
         push @accounts_to_regenerate, $account;
     }
 }
 
 if (@accounts_to_regenerate) {
-    osh_info("Regenerating SSH port forward configs for " . scalar(@accounts_to_regenerate) . " accounts with access to group $shortGroup");
-    
+    osh_info("Regenerating SSH port forward configs for "
+          . scalar(@accounts_to_regenerate)
+          . " accounts with access to group $shortGroup");
+
     my $success_count = 0;
-    my $failed_count = 0;
-    
+    my $failed_count  = 0;
+
     foreach my $account (@accounts_to_regenerate) {
         # Validate and untaint the account name before calling the helper
         my $account_check = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);
         if ($account_check) {
             my $untainted_account = $account_check->value->{'account'};
-            my @cmd = ('sudo', '-n', '/usr/bin/env', 'perl', '-T', $OVH::Bastion::BASEPATH . '/bin/helper/osh-genSSHPFConfigs', '--account', $untainted_account);
-            my $ssh_config_fnret = OVH::Bastion::helper(
-                cmd => \@cmd
+            my @cmd               = (
+                'sudo', '-n', '/usr/bin/env', 'perl', '-T', $OVH::Bastion::BASEPATH . '/bin/helper/osh-genSSHPFConfigs',
+                '--account', $untainted_account
             );
+            my $ssh_config_fnret = OVH::Bastion::helper(cmd => \@cmd);
             if ($ssh_config_fnret) {
                 $success_count++;
             }
@@ -134,15 +135,13 @@ if (@accounts_to_regenerate) {
             $failed_count++;
             osh_warn("Cannot regenerate SSH config for invalid account: $account");
         }
-            osh_warn("Failed to regenerate SSH config for account $account");
-        }
     }
-    
+
     my $msg = "Regenerated SSH port forward configs for $success_count accounts";
     if ($failed_count > 0) {
         $msg .= " ($failed_count failed)";
     }
-    
+
     HEXIT('OK', msg => $msg);
 }
 else {
