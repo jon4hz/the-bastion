@@ -1098,6 +1098,71 @@ sub get_portforward_acls {
         return R('ERR_FORBIDDEN', msg => "Port forwarding feature is disabled on this bastion");
     }
 
+# Read port forwarding rules from a file
+sub get_port_forwards_from_file {
+    my %params = @_;
+    my $file = $params{'file'};
+    
+    return R('ERR_MISSING_PARAMETER', msg => "Missing file parameter") unless $file;
+    return R('ERR_FILE_NOT_FOUND', msg => "File not found or not readable") unless -r $file;
+    
+    my @rules = ();
+    
+    if (open(my $fh, '<', $file)) {
+        while (my $line = <$fh>) {
+            chomp $line;
+            next if $line =~ /^\s*#/;    # skip commented lines
+            next if $line =~ /^\s*$/;    # skip empty lines
+            
+            # parse: remote_ip:ssh_port:forward_port:remote_user:local_port:rule_id [comment]
+            if ($line =~ m{^(\[[^\]]+\]|[^:]+):([^:]*):([^:]*):([^:]*):([^:]*):([^:\s]*)\s*(?:#\s*(.*))?$}) {
+                my ($remote_ip, $ssh_port, $forward_port, $remote_user, $local_port, $rule_id, $comment_part) = ($1, $2, $3, $4, $5, $6, $7);
+
+                # remove brackets from IPv6 addresses
+                $remote_ip =~ s/^\[|\]$//g;
+
+                # handle wildcards
+                $ssh_port = undef if $ssh_port eq '*';
+                $forward_port = undef if $forward_port eq '*';
+                $remote_user = undef if $remote_user eq '*';
+
+                my %entry = (
+                    remote_ip    => $remote_ip,
+                    ssh_port     => $ssh_port,
+                    forward_port => $forward_port,
+                    remote_user  => $remote_user,
+                    local_port   => $local_port,
+                    rule_id      => $rule_id,
+                );
+                
+                # Parse additional info from comments
+                if ($comment_part) {
+                    if ($comment_part =~ /COMMENT=<([^>]+)>/) {
+                        $entry{'comment'} = $1;
+                    }
+                    if ($comment_part =~ /EXPIRY=(\d+)/) {
+                        $entry{'expiry'} = $1;
+                    }
+                    if ($comment_part =~ /FORCEKEY=(\S+)/) {
+                        $entry{'force_key'} = $1;
+                    }
+                    if ($comment_part =~ /FORCEPASSWORD=(\S+)/) {
+                        $entry{'force_password'} = $1;
+                    }
+                }
+                
+                push @rules, \%entry;
+            }
+        }
+        close($fh);
+    }
+    else {
+        return R('ERR_CANNOT_OPEN_FILE', msg => "Cannot open file $file: $!");
+    }
+    
+    return R('OK', value => \@rules);
+}
+
     my $fnret;
     my @acls;
 

@@ -114,6 +114,17 @@ $fnret = OVH::Bastion::portforward_modify(
     forcePassword   => $forcePassword,
 );
 if ($fnret->err eq 'OK') {
+    # Regenerate SSH port forwarding config for this account if SSH config generation is enabled
+    my $config_check = OVH::Bastion::load_configuration();
+    if ($config_check && $config_check->value && $config_check->value->{'portForwardingSSHConfigEnabled'}) {
+        my $ssh_config_fnret = OVH::Bastion::helper(
+            cmd => ['sudo', '-n', '/usr/bin/perl', '-T', $OVH::Bastion::BASEPATH . '/bin/helper/osh-genSSHPFConfigs', '--account', $account]
+        );
+        if (!$ssh_config_fnret) {
+            osh_warn("Failed to regenerate SSH port forwarding config for account $account");
+        }
+    }
+    
     my $ttlmsg = $ttl ? ' (expires in ' . OVH::Bastion::duration2human(seconds => $ttl)->value->{'human'} . ')' : '';
     HEXIT(
         'OK',

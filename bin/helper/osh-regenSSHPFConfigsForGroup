@@ -1,0 +1,139 @@
+#!/usr/bin/perl -T
+# vim: set filetype=perl ts=4 sw=4 sts=4 et:
+# KEYSUDOERS # regenerate sshd port forwarding configs for group members
+# KEYSUDOERS SUPEROWNERS ALL=(root) NOPASSWD: /usr/bin/env perl -T %BASEPATH%/bin/helper/osh-regenSSHPFConfigsForGroup --group %GROUP%
+# FILEMODE 0750
+# FILEOWN 0 root
+
+#>HEADER
+use common::sense;
+use Getopt::Long qw(:config no_auto_abbrev no_ignore_case);
+
+use File::Basename;
+use lib dirname(__FILE__) . '/../../lib/perl';
+use OVH::Bastion;
+use OVH::Bastion::Helper;
+
+# Fetch command options
+my $fnret;
+my ($result, @optwarns);
+my ($group);
+eval {
+    local $SIG{__WARN__} = sub { push @optwarns, shift };
+    $result = GetOptions(
+        "group=s" => sub { $group //= $_[1] },
+    );
+};
+if ($@) { die $@ }
+
+if (!$result) {
+    local $" = ", ";
+    HEXIT('ERR_BAD_OPTIONS', msg => "Error parsing options: @optwarns");
+}
+
+OVH::Bastion::Helper::check_spurious_args();
+
+if (!$group) {
+    HEXIT('ERR_MISSING_PARAMETER', msg => "Missing argument 'group'");
+}
+
+#<HEADER
+
+# test if start by key, append if necessary
+if ($group !~ /^key/) {
+    $group = "key$group";
+}
+
+# Check if the group exists
+$fnret = OVH::Bastion::is_valid_group_and_existing(group => $group, groupType => 'key');
+if (!$fnret) {
+    HEXIT($fnret);
+}
+
+my $shortGroup = $fnret->value->{'shortGroup'};
+
+# Check if port forwarding is enabled
+$fnret = OVH::Bastion::load_configuration();
+if (!$fnret) {
+    HEXIT('ERR_CONFIGURATION', msg => "Failed to load configuration");
+}
+my $config = $fnret->value;
+
+if (!$config->{'portForwardingEnabled'}) {
+    HEXIT('OK', msg => "Port forwarding is disabled, no configs to regenerate");
+}
+
+if (!$config->{'portForwardingSSHConfigEnabled'}) {
+    HEXIT('OK', msg => "SSH port forwarding config generation is disabled, no configs to regenerate");
+}
+
+# Find all accounts that have access to this group's port forwards
+# This includes accounts with symlinks to the group's allowed.forward file
+my @accounts_to_regenerate = ();
+
+# Get all bastion accounts
+$fnret = OVH::Bastion::get_account_list();
+if (!$fnret) {
+    HEXIT('ERR_CANNOT_GET_ACCOUNT_LIST', msg => "Cannot get account list");
+}
+
+foreach my $account (keys %{$fnret->value}) {
+    # Skip system accounts
+    next if $account =~ /^(root|bastionsync|healthcheck|keykeeper|keyreader|allowkeeper|proxyhttp)$/;
+    
+    # Check if this account has a symlink to the group's port forward file
+    my $account_info = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);
+    next unless $account_info;
+    
+    my $sysaccount = $account_info->value->{'sysaccount'};
+    my $remoteaccount = $account_info->value->{'remoteaccount'};
+    
+    my $prefix = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
+    my @potential_symlinks = (
+        "/home/allowkeeper/$sysaccount/$prefix.forward.$shortGroup",
+        "/home/allowkeeper/$sysaccount/$prefix.partial.$shortGroup.forward"
+    );
+    
+    my $has_group_access = 0;
+    foreach my $symlink (@potential_symlinks) {
+        if (-l $symlink && -r $symlink) {
+            $has_group_access = 1;
+            last;
+        }
+    }
+    
+    if ($has_group_access) {
+        push @accounts_to_regenerate, $account;
+    }
+}
+
+if (@accounts_to_regenerate) {
+    osh_info("Regenerating SSH port forward configs for " . scalar(@accounts_to_regenerate) . " accounts with access to group $shortGroup");
+    
+    my $success_count = 0;
+    my $failed_count = 0;
+    
+    foreach my $account (@accounts_to_regenerate) {
+        my @cmd = ('sudo', '-n', '/usr/bin/perl', '-T', $OVH::Bastion::BASEPATH . '/bin/helper/osh-genSSHPFConfigs', '--account', $account);
+        my $ssh_config_fnret = OVH::Bastion::helper(
+            cmd => \@cmd
+        );
+        if ($ssh_config_fnret) {
+            $success_count++;
+        }
+        else {
+            $failed_count++;
+            osh_warn("Failed to regenerate SSH config for account $account");
+        }
+    }
+    
+    my $msg = "Regenerated SSH port forward configs for $success_count accounts";
+    if ($failed_count > 0) {
+        $msg .= " ($failed_count failed)";
+    }
+    
+    HEXIT('OK', msg => $msg);
+}
+else {
+    HEXIT('OK', msg => "No accounts found with access to group $shortGroup port forwards");
+}

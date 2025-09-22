@@ -1184,6 +1184,29 @@ if [ "${opt[profile]}" = 1 ]; then
     fi
 fi
 
+# Create SSH port forwarding config directory
+action_doing "Create SSH port forwarding config directory"
+mkdir -p "$SSH_DIR/sshd_config.forward.d"
+chmod 755 "$SSH_DIR/sshd_config.forward.d"
+action_done
+
+# Generate SSH port forwarding configs for all accounts
+action_doing "Generate SSH port forwarding configurations"
+if [ -x "$basedir/bin/helper/osh-genSSHPFConfigs" ]; then
+    # Check if port forwarding and SSH config generation are enabled
+    port_forwarding_enabled=$(perl -I"$basedir/lib/perl" -MOVH::Bastion -e 'my $config = OVH::Bastion::load_configuration()->value; print $config->{portForwardingEnabled} ? "1" : "0"' 2>/dev/null || echo "0")
+    ssh_config_enabled=$(perl -I"$basedir/lib/perl" -MOVH::Bastion -e 'my $config = OVH::Bastion::load_configuration()->value; print $config->{portForwardingSSHConfigEnabled} ? "1" : "0"' 2>/dev/null || echo "1")
+    
+    if [ "$port_forwarding_enabled" = "1" ] && [ "$ssh_config_enabled" = "1" ]; then
+        sudo -n -u root -- /usr/bin/env perl -T "$basedir/bin/helper/osh-genSSHPFConfigs" --all-accounts
+        action_done
+    else
+        action_na "Port forwarding or SSH config generation is disabled"
+    fi
+else
+    action_na "SSH port forwarding config generator not found"
+fi
+
 if [ "${opt[modify-umask]}" = 1 ]; then
     # umask
     action_doing "Adjust umask in /etc/login.defs if applicable"

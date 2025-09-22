@@ -158,6 +158,22 @@ if (!$any_changes) {
     HEXIT('OK_NO_CHANGE', msg => $msg);
 }
 
-
+# If changes were made to port forwarding symlinks, regenerate SSH configs
+if ($any_changes) {
+    # Check if port forwarding is enabled first
+    my $config_fnret = OVH::Bastion::load_configuration();
+    if ($config_fnret && $config_fnret->value && $config_fnret->value->{'portForwardingEnabled'} && $config_fnret->value->{'portForwardingSSHConfigEnabled'}) {
+        # Regenerate SSH port forwarding config for this account
+        my $ssh_config_fnret = OVH::Bastion::helper(
+            cmd => ['sudo', '-n', '/usr/bin/perl', '-T', $OVH::Bastion::BASEPATH . '/bin/helper/osh-genSSHPFConfigs', '--account', $account]
+        );
+        if (!$ssh_config_fnret) {
+            osh_warn("Failed to regenerate SSH port forwarding config for account $account");
+        }
+        else {
+            osh_debug("Regenerated SSH port forwarding config for account $account due to group membership change");
+        }
+    }
+}
 
 HEXIT("OK", msg => $msg);

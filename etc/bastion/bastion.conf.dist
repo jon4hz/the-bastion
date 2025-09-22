@@ -492,6 +492,11 @@
 #  DEFAULT: 50
 "portForwardingMaxPerGroup": 50,
 #
+# portForwardingSSHConfigEnabled (boolean)
+#     DESC: If set to ``true``, will generate SSH PermitOpen configurations per user to restrict port forwarding access to only authorized destinations. This is the recommended secure approach.
+#  DEFAULT: true
+"portForwardingSSHConfigEnabled": true,
+#
 #################
 # > Other options
 # >> These options are either discouraged (in which case this is explained in the description) or rarely need to be modified.
