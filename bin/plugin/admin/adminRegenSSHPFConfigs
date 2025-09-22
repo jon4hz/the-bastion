@@ -74,7 +74,7 @@ if ($account) {
     
     osh_info "Regenerating SSH port forwarding config for account $account...";
     
-    my @command = qw{ sudo -n -u root -- /usr/bin/perl -T };
+    my @command = qw{ sudo -n -u root -- /usr/bin/env perl -T };
     push @command, $OVH::Bastion::BASEPATH . '/bin/helper/osh-genSSHPFConfigs';
     push @command, '--account', $account;
     
@@ -91,7 +91,7 @@ elsif ($group) {
     
     osh_info "Regenerating SSH port forwarding configs for all accounts with access to group $shortGroup...";
     
-    my @command = qw{ sudo -n -u root -- /usr/bin/perl -T };
+    my @command = qw{ sudo -n -u root -- /usr/bin/env perl -T };
     push @command, $OVH::Bastion::BASEPATH . '/bin/helper/osh-regenSSHPFConfigsForGroup';
     push @command, '--group', $shortGroup;
     
@@ -100,7 +100,7 @@ elsif ($group) {
 elsif ($all_accounts) {
     osh_info "Regenerating SSH port forwarding configs for all accounts...";
     
-    my @command = qw{ sudo -n -u root -- /usr/bin/perl -T };
+    my @command = qw{ sudo -n -u root -- /usr/bin/env perl -T };
     push @command, $OVH::Bastion::BASEPATH . '/bin/helper/osh-genSSHPFConfigs';
     push @command, '--all-accounts';
     

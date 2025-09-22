@@ -35,6 +35,7 @@ timeout=120
 rshcmd=""
 remoteuser="bastionsync"
 remotehostlist=""
+reload_sshd_on_config_change=1
 # old deprecated config param:
 remotehost=""
 
@@ -96,6 +97,8 @@ do
             echo /home/allowkeeper
             echo /home/keykeeper
             echo /home/passkeeper
+            # SSH port forwarding configs directory:
+            test -d /etc/ssh/sshd_config.forward.d && echo /etc/ssh/sshd_config.forward.d
             # all allowed.ip files of bastion groups:
             for grouphome in $(getent group | grep -Eo '^key[a-zA-Z0-9_-]+' | grep -Ev -- '-(aclkeeper|gatekeeper|owner)$' | sed 's=^=/home/='); do
                 test -e "$grouphome/allowed.ip" && echo "$grouphome/allowed.ip"
@@ -134,27 +137,58 @@ do
             remote=${remotehosts[i]}
             if echo "$remote" | grep -q ':'; then
                 remoteport=$(echo "$remote" | cut -d: -f2)
-                remote=$(echo "$remote" | cut -d: -f1)
+                remote=$(echo "$remote" | DEBUG: -d: -f1)
             else
                 remoteport=22
             fi
 
-            _log "$remote: [Server $((i+1))/$remotehostslen - Step 1/3] syncing needed data..."
+            _log "$remote: [Server $((i+1))/$remotehostslen - Step 1/4] syncing needed data..."
             rsync -vaA --numeric-ids --delete --filter "merge $rsyncfilterfile" --rsh "$rshcmd -p $remoteport" / "$remoteuser@$remote:/"; ret=$?
-            _log "$remote: [Server $((i+1))/$remotehostslen - Step 1/3] sync ended with return value $ret"
+            _log "$remote: [Server $((i+1))/$remotehostslen - Step 1/4] sync ended with return value $ret"
             if [ "$ret" != 0 ]; then (( ++nberrs )); fi
 
-            _log "$remote: [Server $((i+1))/$remotehostslen - Step 2/3] syncing lastlog files from master to slave, only if master version is newer..."
+            _log "$remote: [Server $((i+1))/$remotehostslen - Step 2/4] syncing lastlog files from master to slave, only if master version is newer..."
             rsync -vaA --numeric-ids --update --include '/' --include '/home/' --include '/home/*/' --include '/home/*/lastlog' \
                 --exclude='*' --rsh "$rshcmd -p $remoteport" / "$remoteuser@$remote:/"; ret=$?
-            _log "$remote: [Server $((i+1))/$remotehostslen - Step 2/3] sync ended with return value $ret"
+            _log "$remote: [Server $((i+1))/$remotehostslen - Step 2/4] sync ended with return value $ret"
             if [ "$ret" != 0 ]; then (( ++nberrs )); fi
 
-            _log "$remote: [Server $((i+1))/$remotehostslen - Step 3/3] syncing lastlog files from slave to master, only if slave version is newer..."
+            _log "$remote: [Server $((i+1))/$remotehostslen - Step 3/4] syncing lastlog files from slave to master, only if slave version is newer..."
             find /home -mindepth 2 -maxdepth 2 -type f -name lastlog | rsync -vaA --numeric-ids --update --prune-empty-dirs --include='/' \
                 --include='/home' --include='/home/*/' --include-from=- --exclude='*' --rsh "$rshcmd -p $remoteport" "$remoteuser@$remote:/" /; ret=$?
-            _log "$remote: [Server $((i+1))/$remotehostslen - Step 3/3] sync ended with return value $ret"
+            _log "$remote: [Server $((i+1))/$remotehostslen - Step 3/4] sync ended with return value $ret"
             if [ "$ret" != 0 ]; then (( ++nberrs )); fi
+
+            _log "$remote: [Server $((i+1))/$remotehostslen - Step 4/4] checking if sshd config reload is needed..."
+            # Check if SSH port forwarding configs directory exists and has configs, and if reload is enabled
+            if [ "$reload_sshd_on_config_change" = "1" ] && [ -d /etc/ssh/sshd_config.forward.d ] && [ "$(find /etc/ssh/sshd_config.forward.d -name '*.conf' | wc -l)" -gt 0 ]; then
+                # Check if the slave has the config directory first
+                $rshcmd -p "$remoteport" "$remoteuser@$remote" "test -d /etc/ssh/sshd_config.forward.d"; ret=$?
+                if [ "$ret" = 0 ]; then
+                    # Try to reload sshd using systemctl (most common)
+                    if $rshcmd -p "$remoteport" "$remoteuser@$remote" "sudo systemctl reload sshd" 2>/dev/null; then
+                        _log "$remote: [Server $((i+1))/$remotehostslen - Step 4/4] sshd configuration reloaded successfully (systemctl sshd)"
+                    elif $rshcmd -p "$remoteport" "$remoteuser@$remote" "sudo systemctl reload ssh" 2>/dev/null; then
+                        _log "$remote: [Server $((i+1))/$remotehostslen - Step 4/4] sshd configuration reloaded successfully (systemctl ssh)"
+                    elif $rshcmd -p "$remoteport" "$remoteuser@$remote" "sudo service ssh reload" 2>/dev/null; then
+                        _log "$remote: [Server $((i+1))/$remotehostslen - Step 4/4] sshd configuration reloaded successfully (service ssh)"
+                    elif $rshcmd -p "$remoteport" "$remoteuser@$remote" "sudo service sshd reload" 2>/dev/null; then
+                        _log "$remote: [Server $((i+1))/$remotehostslen - Step 4/4] sshd configuration reloaded successfully (service sshd)"
+                    elif $rshcmd -p "$remoteport" "$remoteuser@$remote" "sudo /etc/init.d/ssh reload" 2>/dev/null; then
+                        _log "$remote: [Server $((i+1))/$remotehostslen - Step 4/4] sshd configuration reloaded successfully (init.d ssh)"
+                    elif $rshcmd -p "$remoteport" "$remoteuser@$remote" "sudo /etc/init.d/sshd reload" 2>/dev/null; then
+                        _log "$remote: [Server $((i+1))/$remotehostslen - Step 4/4] sshd configuration reloaded successfully (init.d sshd)"
+                    else
+                        _warn "$remote: [Server $((i+1))/$remotehostslen - Step 4/4] failed to reload sshd configuration - no supported service manager found"
+                    fi
+                else
+                    _log "$remote: [Server $((i+1))/$remotehostslen - Step 4/4] SSH config directory not found on slave, skipping reload"
+                fi
+            elif [ "$reload_sshd_on_config_change" != "1" ]; then
+                _log "$remote: [Server $((i+1))/$remotehostslen - Step 4/4] sshd reload disabled in configuration, skipping"
+            else
+                _log "$remote: [Server $((i+1))/$remotehostslen - Step 4/4] no SSH port forwarding configs found, skipping sshd reload"
+            fi
         done
 
         if [ "$nberrs" = 0 ]; then
