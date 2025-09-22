@@ -68,7 +68,6 @@ if (not grep { $action eq $_ } qw{ add del }) {
 #<PARAMS:ACTION
 
 #>PARAMS:GROUP
-#>PARAMS:GROUP
 my $group_check = OVH::Bastion::is_valid_group_and_existing(group => $group, groupType => "key");
 if (!$group_check) {
     HEXIT('ERR_INVALID_GROUP', msg => "Invalid group '" . $group . "': " . $group_check->msg);
@@ -77,7 +76,6 @@ $group = $group_check->value->{'group'};
 my $groupName = $group_check->value->{'shortGroup'};
 #<PARAMS:GROUP
 
-#<PARAMS:GROUP
 
 #>CODE
 my $machine = "$remote_ip:" . ($ssh_port || '*') . "->" . ($forward_port || '*') . " (" . ($remote_user || '*') . ")";
