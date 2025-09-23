@@ -1666,9 +1666,9 @@ else {
     # Add port forwarding arguments if validated
     if (@validatedForwards) {
         foreach my $forward (@validatedForwards) {
-            push @command, '-L', "127.0.0.1:$forward->{local_port}:$forward->{remote_ip}:$forward->{remote_port}";
+            push @command, '-L', "localhost:$forward->{local_port}:$forward->{remote_ip}:$forward->{remote_port}";
             osh_debug(
-                "Added port forward: -L 127.0.0.1:$forward->{local_port}:$forward->{remote_ip}:$forward->{remote_port}"
+                "Added port forward: -L localhost:$forward->{local_port}:$forward->{remote_ip}:$forward->{remote_port}"
             );
         }
 
