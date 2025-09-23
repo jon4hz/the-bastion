@@ -664,9 +664,61 @@ if ($fnret) {
     osh_debug("will work on IP $ip");
 }
 
+
+# Check if we got a telnet or ssh password user
+my $userPasswordClue;
+my $userPasswordContext;
+if (defined $user and $user =~ /^(telnet|ssh)-passw(or)?d-([^-]+)(-([^-]+))?$/) {
+    my $method = $1;
+
+    # update user
+    $user = $3;
+
+    if ($4) {
+        $userPasswordClue = $5;
+    }
+    else {
+        $userPasswordClue = $user;
+    }
+
+    if ($method eq 'telnet') {
+
+        # as if user specified -e aka --telnet
+        $telnet = 1;
+    }
+
+    $userPasswordContext = 'group';
+}
+elsif ($passwordFile) {
+    $userPasswordClue    = $passwordFile;
+    $userPasswordContext = 'group';
+}
+elsif ($selfPassword) {
+    $userPasswordClue    = $self;
+    $userPasswordContext = 'self';
+}
+
+osh_debug("Will use password file $userPasswordClue with user $user under context $userPasswordContext")
+  if $userPasswordClue;
+
+if ($optPort) {
+    $port = $optPort;
+}
+elsif ($telnet) {
+    $port = 23;
+}
+else {
+    $port = 22;
+}
+
+if ($telnet && !$config->{'telnetAllowed'}) {
+    main_exit OVH::Bastion::EXIT_ACCESS_DENIED, 'telnet_denied',
+      "Sorry $self, the telnet protocol has been disabled by policy";
+}
+
 # Handle port forwarding requests
 my @validatedForwards;
-if ($localForwards && @$localForwards) {
+if ($localForwards && @$localForwards && !$telnet) {
     # Check if port forwarding is globally enabled
     if (!$config->{'portForwardingEnabled'}) {
         main_exit(OVH::Bastion::EXIT_ACCESS_DENIED,
@@ -828,57 +880,6 @@ if ($localForwards && @$localForwards) {
 
     osh_info("Port forwarding enabled: "
           . join(', ', map { "localhost:$_->{local_port} -> $_->{remote_ip}:$_->{remote_port}" } @validatedForwards));
-}
-
-# Check if we got a telnet or ssh password user
-my $userPasswordClue;
-my $userPasswordContext;
-if (defined $user and $user =~ /^(telnet|ssh)-passw(or)?d-([^-]+)(-([^-]+))?$/) {
-    my $method = $1;
-
-    # update user
-    $user = $3;
-
-    if ($4) {
-        $userPasswordClue = $5;
-    }
-    else {
-        $userPasswordClue = $user;
-    }
-
-    if ($method eq 'telnet') {
-
-        # as if user specified -e aka --telnet
-        $telnet = 1;
-    }
-
-    $userPasswordContext = 'group';
-}
-elsif ($passwordFile) {
-    $userPasswordClue    = $passwordFile;
-    $userPasswordContext = 'group';
-}
-elsif ($selfPassword) {
-    $userPasswordClue    = $self;
-    $userPasswordContext = 'self';
-}
-
-osh_debug("Will use password file $userPasswordClue with user $user under context $userPasswordContext")
-  if $userPasswordClue;
-
-if ($optPort) {
-    $port = $optPort;
-}
-elsif ($telnet) {
-    $port = 23;
-}
-else {
-    $port = 22;
-}
-
-if ($telnet && !$config->{'telnetAllowed'}) {
-    main_exit OVH::Bastion::EXIT_ACCESS_DENIED, 'telnet_denied',
-      "Sorry $self, the telnet protocol has been disabled by policy";
 }
 
 if ($userKbdInteractive && !$config->{'keyboardInteractiveAllowed'}) {
