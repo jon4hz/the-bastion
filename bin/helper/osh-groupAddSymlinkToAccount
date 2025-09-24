@@ -161,11 +161,11 @@ if (!$any_changes) {
 # If changes were made to port forwarding symlinks, regenerate SSH configs
 if ($any_changes) {
     # Check if port forwarding is enabled first
-    my $config_fnret = OVH::Bastion::load_configuration();
-    if (   $config_fnret
-        && $config_fnret->value
-        && $config_fnret->value->{'portForwardingEnabled'}
-        && $config_fnret->value->{'portForwardingSSHConfigEnabled'})
+    my $config = OVH::Bastion::load_configuration();
+    if (   $config
+        && $config->value
+        && $config->value->{'portForwardingEnabled'}
+        && $config->value->{'portForwardingSSHConfigEnabled'})
     {
         # Regenerate SSH port forwarding config for this account
         # Validate and untaint the account name before calling the helper

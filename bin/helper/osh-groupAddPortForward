@@ -44,8 +44,12 @@ if (!$result) {
 
 OVH::Bastion::Helper::check_spurious_args();
 
-if (not $action or not $remote_ip or not $group) {
-    HEXIT('ERR_MISSING_PARAMETER', msg => "Missing argument 'action' or 'remote_ip' or 'group'");
+if (not $action or not $remote_ip or not $group or not $ssh_port or not $forward_port) {
+    HEXIT('ERR_MISSING_PARAMETER', msg => "Missing argument 'action' or 'remote_ip' or 'group' or 'ssh_port' or 'forward_port'");
+}
+
+if (not grep { $action eq $_ } qw{ add del }) {
+    return R('ERR_INVALID_PARAMETER', msg => "expected 'add' or 'del' as an action");
 }
 
 # Check if port forwarding is enabled in configuration
@@ -60,13 +64,6 @@ if (!$config->{'portForwardingEnabled'}) {
 
 #<HEADER
 
-#>PARAMS:ACTION
-if (not grep { $action eq $_ } qw{ add del }) {
-    return R('ERR_INVALID_PARAMETER', msg => "expected 'add' or 'del' as an action");
-}
-
-#<PARAMS:ACTION
-
 #>PARAMS:GROUP
 my $group_check = OVH::Bastion::is_valid_group_and_existing(group => $group, groupType => "key");
 if (!$group_check) {
@@ -74,7 +71,26 @@ if (!$group_check) {
 }
 $group = $group_check->value->{'group'};
 my $groupName = $group_check->value->{'shortGroup'};
+osh_debug("got group $group/$shortGroup");
 #<PARAMS:GROUP
+
+#>RIGHTSCHECK
+if ($self eq 'root') {
+    osh_debug "Real root, skipping checks of permissions";
+}
+else {
+    $fnret = OVH::Bastion::is_group_aclkeeper(account => $self, group => $shortGroup, sudo => 1, superowner => 1);
+    $fnret or HEXIT('ERR_NOT_ALLOWED', msg => "Sorry, you must be an aclkeeper of group $shortGroup");
+}
+
+#<RIGHTSCHECK
+
+# take a lock here, to block other group ACL modifying commands for this group until we're done.
+$fnret = OVH::Bastion::Helper::get_lock_fh(category => "groupacl", basepath => "/home/$group");
+$fnret or HEXIT($fnret);
+my $lock_fh = $fnret->value;
+$fnret = OVH::Bastion::Helper::acquire_lock($lock_fh);
+$fnret or HEXIT($fnret);
 
 #>CODE
 my $machine = "$remote_ip:" . ($ssh_port || '*') . "->" . ($forward_port || '*') . " (" . ($remote_user || '*') . ")";
@@ -95,8 +111,7 @@ $fnret = OVH::Bastion::portforward_modify(
 );
 if ($fnret->err eq 'OK') {
     # Regenerate SSH port forwarding configs for all accounts that have access to this group if SSH config generation is enabled
-    my $config_check = OVH::Bastion::load_configuration();
-    if ($config_check && $config_check->value && $config_check->value->{'portForwardingSSHConfigEnabled'}) {
+    if ($config->value->{'portForwardingSSHConfigEnabled'}) {
         my $ssh_config_fnret = OVH::Bastion::helper(
             cmd => [$OVH::Bastion::BASEPATH . '/bin/helper/osh-regenSSHPFConfigsForGroup', '--group', $groupName]);
         if (!$ssh_config_fnret) {
@@ -121,6 +136,12 @@ if ($fnret->err eq 'OK') {
         ? "Port forward access to $machine was added to group $groupName$ttlmsg"
         : "Port forward access to $machine was removed from group $groupName$ttlmsg"
     );
+}
+elsif ($fnret->err eq 'OK_NO_CHANGE') {
+    HEXIT('OK_NO_CHANGE',
+        msg => $action eq 'add'
+        ? "Entry $machine was already added to group $shortGroup, nothing done"
+        : "Entry $machine was not in group $shortGroup, nothing done");
 }
 else {
     HEXIT($fnret);

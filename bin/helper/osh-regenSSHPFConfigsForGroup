@@ -35,6 +35,19 @@ if (!$group) {
     HEXIT('ERR_MISSING_PARAMETER', msg => "Missing argument 'group'");
 }
 
+# Check if port forwarding is enabled
+$fnret = OVH::Bastion::load_configuration();
+if (!$fnret) {
+    HEXIT('ERR_CONFIGURATION', msg => "Failed to load configuration");
+}
+my $config = $fnret->value;
+if (!$config->{'portForwardingEnabled'}) {
+    HEXIT('OK', msg => "Port forwarding is disabled, no configs to regenerate");
+}
+if (!$config->{'portForwardingSSHConfigEnabled'}) {
+    HEXIT('OK', msg => "SSH port forwarding config generation is disabled, no configs to regenerate");
+}
+
 #<HEADER
 
 # test if start by key, append if necessary
@@ -50,23 +63,9 @@ if (!$fnret) {
 
 my $shortGroup = $fnret->value->{'shortGroup'};
 
-# Check if port forwarding is enabled
-$fnret = OVH::Bastion::load_configuration();
-if (!$fnret) {
-    HEXIT('ERR_CONFIGURATION', msg => "Failed to load configuration");
-}
-my $config = $fnret->value;
-
-if (!$config->{'portForwardingEnabled'}) {
-    HEXIT('OK', msg => "Port forwarding is disabled, no configs to regenerate");
-}
-
-if (!$config->{'portForwardingSSHConfigEnabled'}) {
-    HEXIT('OK', msg => "SSH port forwarding config generation is disabled, no configs to regenerate");
-}
-
 # Find all accounts that have access to this group's port forwards
 # This includes accounts with symlinks to the group's allowed.forward file
+# Should this be moved to the portforward.inc or allowkeeper.inc library?
 my @accounts_to_regenerate = ();
 
 # Get all bastion accounts
@@ -77,7 +76,7 @@ if (!$fnret) {
 
 foreach my $account (keys %{$fnret->value}) {
     # Skip system accounts
-    my %system_accounts = map { $_ => 1 } qw(root bastionsync healthcheck keykeeper keyreader allowkeeper proxyhttp);
+    my %system_accounts = map { $_ => 1 } qw(root bastionsync healthcheck keykeeper keyreader allowkeeper proxyhttp lastoshuser);
     next if exists $system_accounts{$account};
 
     # Check if this account has a symlink to the group's port forward file
@@ -85,6 +84,7 @@ foreach my $account (keys %{$fnret->value}) {
     next unless $account_info;
 
     my $sysaccount    = $account_info->value->{'sysaccount'};
+    # this would probably be required for realm support (?), but that isn't fully implemented
     my $remoteaccount = $account_info->value->{'remoteaccount'};
 
     my $prefix             = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
@@ -115,7 +115,8 @@ if (@accounts_to_regenerate) {
     my $failed_count  = 0;
 
     foreach my $account (@accounts_to_regenerate) {
-        # Validate and untaint the account name before calling the helper
+        # Validate and untaint the account name before calling the helper.
+        # We already called is_bastion_account_valid_and_existing above, but I got a weird taint error and this fixed it.
         my $account_check = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);
         if ($account_check) {
             my $untainted_account = $account_check->value->{'account'};

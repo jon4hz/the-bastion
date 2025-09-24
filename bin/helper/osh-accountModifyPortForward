@@ -54,15 +54,15 @@ eval {
 };
 if ($@) { die $@ }
 
+OVH::Bastion::Helper::check_spurious_args();
+
 if (!$result) {
     local $" = ", ";
     HEXIT('ERR_BAD_OPTIONS', msg => "Error parsing options: @optwarns");
 }
 
-OVH::Bastion::Helper::check_spurious_args();
-
-if (not $action or not $remote_ip or not $account or not $target) {
-    HEXIT('ERR_MISSING_PARAMETER', msg => "Missing argument 'action' or 'remote_ip' or 'account' or 'target'");
+if (not $action or not $remote_ip or not $account or not $target or not $forward_port or not $ssh_port) {
+    HEXIT('ERR_MISSING_PARAMETER', msg => "Missing argument 'action' or 'remote_ip' or 'account' or 'target' or 'forward_port' or 'ssh_port'");
 }
 
 # Check if port forwarding is enabled in configuration
@@ -115,8 +115,7 @@ $fnret = OVH::Bastion::portforward_modify(
 );
 if ($fnret->err eq 'OK') {
     # Regenerate SSH port forwarding config for this account if SSH config generation is enabled
-    my $config_check = OVH::Bastion::load_configuration();
-    if ($config_check && $config_check->value && $config_check->value->{'portForwardingSSHConfigEnabled'}) {
+    if ($config->value->{'portForwardingSSHConfigEnabled'}) {
         # Validate and untaint the account name before calling the helper
         my $account_check = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);
         if ($account_check) {
@@ -155,6 +154,10 @@ if ($fnret->err eq 'OK') {
         : "Port forward access to $machine was removed from account $account$ttlmsg"
     );
 }
-else {
-    HEXIT($fnret);
+elsif ($fnret->err eq 'OK_NO_CHANGE') {
+    HEXIT('OK_NO_CHANGE',
+        msg => $action eq 'add'
+        ? "Access to $machine was already granted to account $account, nothing done"
+        : "Access to $machine was not granted to account $account, nothing done");
 }
+HEXIT($fnret);

@@ -52,44 +52,12 @@ if (!$fnret) {
 }
 my $config = $fnret->value;
 
-if (!$config->{'portForwardingEnabled'}) {
+if (!$config->{'portForwardingEnabled'} || !$config->{'portForwardingSSHConfigEnabled'}) {
     # Port forwarding is disabled, clean up any existing configs
-    if ($all_accounts) {
-        osh_info("Port forwarding disabled, cleaning up all SSH port forward configs");
-        system("/bin/rm",        "-rf", "/etc/ssh/sshd_config.forward.d/");
-        system("/usr/bin/mkdir", "-p",  "/etc/ssh/sshd_config.forward.d/");
-    }
-    elsif ($account) {
-        osh_info("Port forwarding disabled, cleaning up SSH port forward config for $account");
-        # Untaint the account name for file operations
-        my $safe_account = $account;
-        if ($safe_account =~ /^([a-zA-Z0-9._-]+)$/) {
-            $safe_account = $1;    # Untainted
-            my $config_file = "/etc/ssh/sshd_config.forward.d/$safe_account.conf";
-            unlink($config_file) if -f $config_file;
-        }
-    }
+    osh_info("Port forwarding disabled or ssh config generation disabled, cleaning up all SSH port forward configs");
+    system("/bin/rm",        "-rf", "/etc/ssh/sshd_config.forward.d/");
+    system("/usr/bin/mkdir", "-p",  "/etc/ssh/sshd_config.forward.d/");
     HEXIT('OK', msg => "Port forwarding is disabled, configs cleaned up");
-}
-
-if (!$config->{'portForwardingSSHConfigEnabled'}) {
-    # SSH config generation is disabled
-    if ($all_accounts) {
-        osh_info("SSH port forwarding config generation disabled, cleaning up all configs");
-        system("/bin/rm",        "-rf", "/etc/ssh/sshd_config.forward.d/");
-        system("/usr/bin/mkdir", "-p",  "/etc/ssh/sshd_config.forward.d/");
-    }
-    elsif ($account) {
-        osh_info("SSH port forwarding config generation disabled, cleaning up config for $account");
-        # Untaint the account name for file operations
-        my $safe_account = $account;
-        if ($safe_account =~ /^([a-zA-Z0-9._-]+)$/) {
-            $safe_account = $1;    # Untainted
-            my $config_file = "/etc/ssh/sshd_config.forward.d/$safe_account.conf";
-            unlink($config_file) if -f $config_file;
-        }
-    }
-    HEXIT('OK', msg => "SSH port forwarding config generation is disabled, configs cleaned up");
 }
 
 # Ensure the directory exists
@@ -113,7 +81,7 @@ my $configs_removed   = 0;
 
 foreach my $acc (@accounts_to_process) {
     # Skip system accounts
-    my %system_accounts = map { $_ => 1 } qw(root bastionsync healthcheck keykeeper keyreader allowkeeper proxyhttp);
+    my %system_accounts = map { $_ => 1 } qw(root bastionsync healthcheck keykeeper keyreader allowkeeper proxyhttp lastoshuser);
     next if exists $system_accounts{$acc};
 
     # Validate account exists
@@ -166,6 +134,7 @@ foreach my $acc (@accounts_to_process) {
     }
 
     # 2. Group port forwards (through symlinks)
+    # remote account for realm support(?)
     my $prefix        = $remoteaccount ? "allowed_$remoteaccount" : "allowed";
     my @symlink_files = glob("/home/allowkeeper/$sysaccount/$prefix.forward.*");
     foreach my $symlink (@symlink_files) {
