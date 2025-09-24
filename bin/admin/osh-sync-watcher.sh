@@ -102,12 +102,23 @@ do
             # all allowed.ip files of bastion groups:
             for grouphome in $(getent group | grep -Eo '^key[a-zA-Z0-9_-]+' | grep -Ev -- '-(aclkeeper|gatekeeper|owner)$' | sed 's=^=/home/='); do
                 test -e "$grouphome/allowed.ip" && echo "$grouphome/allowed.ip"
+                test -e "$grouphome/allowed.forward" && echo "$grouphome/allowed.forward"
             done
             # all authorized_keys files of bastion accounts:
             for accounthome in $(getent passwd | grep ":$basedir/bin/shell/osh.pl\$" | cut -d: -f6); do
                 test -f "$accounthome/$AK_FILE" && echo "$accounthome/$AK_FILE"
             done
-        } | head -"$maxfiles" | timeout "$timeout" inotifywait -e close_write -e moved_to -e create -e delete -e delete_self --quiet --recursive --csv --fromfile - ; ret=$?
+        } | head -"$maxfiles" | timeout "$timeout" inotifywait -e close_write -e moved_to -e create -e delete -e delete_self --quiet --recursive --csv --fromfile - > /tmp/inotify_events_$$.log ; ret=$?
+        
+        # Check if SSH config directory had any changes
+        ssh_config_changed=0
+        if [ -f "/tmp/inotify_events_$$.log" ] && [ -s "/tmp/inotify_events_$$.log" ]; then
+            if grep -q "^/etc/ssh/sshd_config\.forward\.d/" "/tmp/inotify_events_$$.log"; then
+                ssh_config_changed=1
+            fi
+        fi
+        rm -f "/tmp/inotify_events_$$.log"
+
         if [ "$ret" = 124 ] ; then
                 _log "... timed out, syncing just in case!"
         elif [ "$ret" = 0 ] ; then
@@ -137,15 +148,21 @@ do
             remote=${remotehosts[i]}
             if echo "$remote" | grep -q ':'; then
                 remoteport=$(echo "$remote" | cut -d: -f2)
-                remote=$(echo "$remote" | DEBUG: -d: -f1)
+                remote=$(echo "$remote" | cut -d: -f1)
             else
                 remoteport=22
             fi
 
             _log "$remote: [Server $((i+1))/$remotehostslen - Step 1/4] syncing needed data..."
-            rsync -vaA --numeric-ids --delete --filter "merge $rsyncfilterfile" --rsh "$rshcmd -p $remoteport" / "$remoteuser@$remote:/"; ret=$?
+            rsync_output=$(rsync -vaA --numeric-ids --delete --filter "merge $rsyncfilterfile" --rsh "$rshcmd -p $remoteport" / "$remoteuser@$remote:/" 2>&1); ret=$?
+            echo "$rsync_output"
             _log "$remote: [Server $((i+1))/$remotehostslen - Step 1/4] sync ended with return value $ret"
             if [ "$ret" != 0 ]; then (( ++nberrs )); fi
+            
+            # Check if SSH config files were transferred in this sync
+            if echo "$rsync_output" | grep -q "etc/ssh/sshd_config\.forward\.d/"; then
+                ssh_config_changed=1
+            fi
 
             _log "$remote: [Server $((i+1))/$remotehostslen - Step 2/4] syncing lastlog files from master to slave, only if master version is newer..."
             rsync -vaA --numeric-ids --update --include '/' --include '/home/' --include '/home/*/' --include '/home/*/lastlog' \
@@ -160,8 +177,8 @@ do
             if [ "$ret" != 0 ]; then (( ++nberrs )); fi
 
             _log "$remote: [Server $((i+1))/$remotehostslen - Step 4/4] checking if sshd config reload is needed..."
-            # Check if SSH port forwarding configs directory exists and has configs, and if reload is enabled
-            if [ "$reload_sshd_on_config_change" = "1" ] && [ -d /etc/ssh/sshd_config.forward.d ] && [ "$(find /etc/ssh/sshd_config.forward.d -name '*.conf' | wc -l)" -gt 0 ]; then
+            # Check if SSH port forwarding configs directory exists and has configs, if reload is enabled, and if changes occurred
+            if [ "$reload_sshd_on_config_change" = "1" ] && [ "$ssh_config_changed" = "1" ] && [ -d /etc/ssh/sshd_config.forward.d ] && [ "$(find /etc/ssh/sshd_config.forward.d -name '*.conf' | wc -l)" -gt 0 ]; then
                 # Check if the slave has the config directory first
                 $rshcmd -p "$remoteport" "$remoteuser@$remote" "test -d /etc/ssh/sshd_config.forward.d"; ret=$?
                 if [ "$ret" = 0 ]; then
@@ -186,6 +203,8 @@ do
                 fi
             elif [ "$reload_sshd_on_config_change" != "1" ]; then
                 _log "$remote: [Server $((i+1))/$remotehostslen - Step 4/4] sshd reload disabled in configuration, skipping"
+            elif [ "$ssh_config_changed" != "1" ]; then
+                _log "$remote: [Server $((i+1))/$remotehostslen - Step 4/4] no SSH port forwarding config changes detected, skipping sshd reload"
             else
                 _log "$remote: [Server $((i+1))/$remotehostslen - Step 4/4] no SSH port forwarding configs found, skipping sshd reload"
             fi
