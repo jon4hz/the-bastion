@@ -41,9 +41,14 @@ EOF
 
 my $fnret;
 
-if (!$account) {
-    help();
-    osh_exit 'ERR_MISSING_PARAMETER', "Missing mandatory parameter 'account'";
+# Check if port forwarding is enabled in configuration
+$fnret = OVH::Bastion::load_configuration();
+if (!$fnret) {
+    osh_exit 'ERR_CONFIGURATION', "Failed to load configuration";
+}
+my $config = $fnret->value;
+if (!$config->{'portForwardingEnabled'}) {
+    osh_exit 'ERR_FORBIDDEN', "Port forwarding feature is disabled on this bastion";
 }
 
 if (!$ip) {
@@ -64,19 +69,14 @@ $remoteUser  = $fnret->value->{'remoteUser'};
 $sshPort     = $fnret->value->{'sshPort'};
 $forwardPort = $fnret->value->{'forwardPort'};
 
+if (not $account) {
+    help();
+    osh_exit 'ERR_MISSING_PARAMETER', "Missing mandatory parameter 'account'";
+}
+
 $fnret = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);
 $fnret or osh_exit $fnret;
 $account = $fnret->value->{'account'};
-
-# Check if port forwarding is enabled in configuration
-$fnret = OVH::Bastion::load_configuration();
-if (!$fnret) {
-    osh_exit 'ERR_CONFIGURATION', "Failed to load configuration";
-}
-my $config = $fnret->value;
-if (!$config->{'portForwardingEnabled'}) {
-    osh_exit 'ERR_FORBIDDEN', "Port forwarding feature is disabled on this bastion";
-}
 
 osh_info "Removing port forward access to $ip:"
   . ($sshPort     || '*') . "->"

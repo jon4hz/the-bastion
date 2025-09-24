@@ -39,6 +39,17 @@ EOF
 
 my $fnret;
 
+# Check if port forwarding is enabled in configuration
+$fnret = OVH::Bastion::load_configuration();
+if (!$fnret) {
+    osh_exit 'ERR_CONFIGURATION', "Failed to load configuration";
+}
+my $config = $fnret->value;
+if (!$config->{'portForwardingEnabled'}) {
+    osh_exit 'ERR_FORBIDDEN', "Port forwarding feature is disabled on this bastion";
+}
+
+
 $fnret = OVH::Bastion::get_portforward_acls(account => $self);
 $fnret or osh_exit $fnret;
 

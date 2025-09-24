@@ -43,13 +43,6 @@ EOF
 
 my $fnret;
 
-# Check parameter combinations
-my $param_count = ($account ? 1 : 0) + ($group ? 1 : 0) + ($all_accounts ? 1 : 0);
-if ($param_count != 1) {
-    help();
-    osh_exit 'ERR_INVALID_PARAMETER', "You must specify exactly one of --account, --group, or --all-accounts";
-}
-
 # Check if port forwarding is enabled
 $fnret = OVH::Bastion::load_configuration();
 if (!$fnret) {
@@ -63,6 +56,13 @@ if (!$config->{'portForwardingEnabled'}) {
 
 if (!$config->{'portForwardingSSHConfigEnabled'}) {
     osh_exit 'ERR_FORBIDDEN', "SSH port forwarding config generation is disabled on this bastion";
+}
+
+# Check parameter combinations
+my $param_count = ($account ? 1 : 0) + ($group ? 1 : 0) + ($all_accounts ? 1 : 0);
+if ($param_count != 1) {
+    help();
+    osh_exit 'ERR_INVALID_PARAMETER', "You must specify exactly one of --account, --group, or --all-accounts";
 }
 
 # Execute based on parameters

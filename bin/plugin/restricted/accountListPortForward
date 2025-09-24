@@ -8,9 +8,6 @@ use OVH::Result;
 use OVH::Bastion;
 use OVH::Bastion::Plugin qw( :DEFAULT help );
 
-# globally allow sys_getpw* and sys_getgr* cache use
-$ENV{'PW_GR_CACHE'} = 1;
-
 my $remainingOptions = OVH::Bastion::Plugin::begin(
     argv    => \@ARGV,
     header  => "list port forwarding accesses of an account",
@@ -41,6 +38,17 @@ EOF
 
 my $fnret;
 
+# Check if port forwarding is enabled in configuration
+$fnret = OVH::Bastion::load_configuration();
+if (!$fnret) {
+    osh_exit 'ERR_CONFIGURATION', "Failed to load configuration";
+}
+my $config = $fnret->value;
+if (!$config->{'portForwardingEnabled'}) {
+    osh_exit 'ERR_FORBIDDEN', "Port forwarding feature is disabled on this bastion";
+}
+
+
 if (!$account) {
     help();
     osh_exit 'ERR_MISSING_PARAMETER', "Missing parameter 'account'";
@@ -48,22 +56,23 @@ if (!$account) {
 
 $fnret = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);
 $fnret or osh_exit $fnret;
-
-# get returned untainted value
 $account = $fnret->value->{'account'};
-
-if (!OVH::Bastion::is_admin(account => $self, sudo => 1)) {
-    osh_exit 'ERR_ACCESS_DENIED', "You must be an admin to list another account's port forwarding accesses";
-}
 
 $fnret = OVH::Bastion::get_portforward_acls(account => $account);
 $fnret or osh_exit $fnret;
+
+if (!OVH::Bastion::is_auditor(account => $self)) {
+    osh_info "NOTE: you're not a bastion auditor, hence you won't be able to";
+    osh_info "see access lists of groups you're not yourself a member of.";
+    osh_info ' ';
+}
 
 if (not @{$fnret->value}) {
     osh_ok R('OK_EMPTY', msg => "Account $account has no registered port forwarding accesses through this bastion");
 }
 
 osh_info "Account $account has the following port forwarding accesses:\n";
+osh_info ' ';
 
 OVH::Bastion::print_portforward_acls(
     acls     => $fnret->value,

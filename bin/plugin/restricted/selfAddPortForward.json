@@ -2,18 +2,17 @@
     "interactive": [
         "selfAddPortForward"                         , {"ac" : ["--host"]},
         "selfAddPortForward +--host"                 , {"pr" : ["<HOST>", "<IP>", "<IP/MASK>"]},
-        "selfAddPortForward +--host +\\S+"           , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--remote-port"]},
+        "selfAddPortForward +--host +\\S+"           , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port"]},
         "selfAddPortForward +--host +\\S+ +.*--remote-user" , {"pr" : ["<USER>"]},
         "selfAddPortForward +--host +\\S+ +.*--ssh-port"    , {"pr" : ["<PORT>"]},
         "selfAddPortForward +--host +\\S+ +.*--forward-port" , {"pr" : ["<PORT>"]},
-        "selfAddPortForward +--host +\\S+ +.*--remote-port"  , {"pr" : ["<PORT>"]},
-        "selfAddPortForward +--host +\\S+ +--(remote-user|ssh-port|forward-port|remote-port) +\\S+"                              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--remote-port", "--ttl", "--comment", "--force-key", "--force-password"]},
-        "selfAddPortForward +--host +\\S+ +--(remote-user|ssh-port|forward-port|remote-port) +\\S+ +--(remote-user|ssh-port|forward-port|remote-port) +\\S+"                              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--remote-port", "--ttl", "--comment", "--force-key", "--force-password"]},
+        "selfAddPortForward +--host +\\S+ +--(remote-user|ssh-port|forward-port) +\\S+"                              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--ttl", "--comment", "--force-key", "--force-password"]},
+        "selfAddPortForward +--host +\\S+ +--(remote-user|ssh-port|forward-port) +\\S+ +--(remote-user|ssh-port|forward-port) +\\S+"                              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--ttl", "--comment", "--force-key", "--force-password"]},
         "selfAddPortForward +--host +\\S+ +.*--ttl"         , {"pr" : ["<SECONDS>", "<DURATION>"]},
         "selfAddPortForward +--remote-host +\\S+ +.*--comment"     , {"pr" : ["<COMMENT>"]},
         "selfAddPortForward +--remote-host +\\S+ +.*--force-key"   , {"pr" : ["<FINGERPRINT>"]},
         "selfAddPortForward +--remote-host +\\S+ +.*--force-password" , {"pr" : ["<HASH>"]},
-        "selfAddPortForward +--remote-host +\\S+ +.*--(ttl|comment|force-key|force-password) +\\S+"              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--remote-port", "--ttl", "--comment", "--force-key", "--force-password"]},
-        "selfAddPortForward +--remote-host +\\S+ +.*--(ttl|comment|force-key|force-password) +\\S+ +--(remote-user|ssh-port|forward-port|remote-port|ttl|comment|force-key|force-password) +\\S+" , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--remote-port", "--ttl", "--comment", "--force-key", "--force-password"]}
+        "selfAddPortForward +--remote-host +\\S+ +.*--(ttl|comment|force-key|force-password) +\\S+"              , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--ttl", "--comment", "--force-key", "--force-password"]},
+        "selfAddPortForward +--remote-host +\\S+ +.*--(ttl|comment|force-key|force-password) +\\S+ +--(remote-user|ssh-port|forward-port|ttl|comment|force-key|force-password) +\\S+" , {"ac" : ["<enter>", "--remote-user", "--ssh-port", "--forward-port", "--ttl", "--comment", "--force-key", "--force-password"]}
     ]
 }

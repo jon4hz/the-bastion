@@ -44,6 +44,16 @@ EOF
 
 my $fnret;
 
+# Check if port forwarding is enabled in configuration
+$fnret = OVH::Bastion::load_configuration();
+if (!$fnret) {
+    osh_exit 'ERR_CONFIGURATION', "Failed to load configuration";
+}
+my $config = $fnret->value;
+if (!$config->{'portForwardingEnabled'}) {
+    osh_exit 'ERR_FORBIDDEN', "Port forwarding feature is disabled on this bastion";
+}
+
 if (not $account) {
     help();
     osh_exit 'ERR_MISSING_PARAMETER', "Missing mandatory parameter 'account'";
@@ -59,20 +69,6 @@ if (not $ip) {
     osh_exit 'ERR_MISSING_PARAMETER', "Missing mandatory parameter 'host' or didn't resolve correctly";
 }
 
-$fnret = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);
-$fnret or osh_exit $fnret;
-$account = $fnret->value->{'account'};
-
-$fnret = OVH::Bastion::is_valid_group_and_existing(group => $group, groupType => "key");
-$fnret or osh_exit $fnret;
-
-# get returned untainted value
-$group = $fnret->value->{'group'};
-my $shortGroup = $fnret->value->{'shortGroup'};
-
-$fnret = OVH::Bastion::is_group_gatekeeper(account => $self, group => $shortGroup, sudo => 1);
-$fnret or osh_exit('ERR_NOT_GROUP_GATEKEEPER', "You must be a gatekeeper of group $shortGroup");
-
 $fnret = OVH::Bastion::Plugin::ACL::check_portforward(
     remoteUser  => $remoteUser,
     sshPort     => $sshPort,
@@ -86,15 +82,19 @@ $remoteUser  = $fnret->value->{'remoteUser'};
 $sshPort     = $fnret->value->{'sshPort'};
 $forwardPort = $fnret->value->{'forwardPort'};
 
-# Check if port forwarding is enabled in configuration
-$fnret = OVH::Bastion::load_configuration();
-if (!$fnret) {
-    osh_exit 'ERR_CONFIGURATION', "Failed to load configuration";
-}
-my $config = $fnret->value;
-if (!$config->{'portForwardingEnabled'}) {
-    osh_exit 'ERR_FORBIDDEN', "Port forwarding feature is disabled on this bastion";
-}
+$fnret = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);
+$fnret or osh_exit $fnret;
+$account = $fnret->value->{'account'};
+
+$fnret = OVH::Bastion::is_valid_group_and_existing(group => $group, groupType => "key");
+$fnret or osh_exit $fnret;
+
+# get returned untainted value
+$group = $fnret->value->{'group'};
+my $shortGroup = $fnret->value->{'shortGroup'};
+
+$fnret = OVH::Bastion::is_group_gatekeeper(account => $self, group => $shortGroup, sudo => 1);
+$fnret or osh_exit('ERR_NOT_GROUP_GATEKEEPER', "You must be a gatekeeper of group $shortGroup");
 
 osh_info "Removing port forward access to $ip:"
   . ($sshPort     || '*') . "->"

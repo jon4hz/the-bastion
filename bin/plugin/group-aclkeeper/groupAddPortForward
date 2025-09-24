@@ -51,25 +51,21 @@ EOF
 # Plugin::begin() automatically resolves --remote-host to $host and $ip variables
 my $fnret;
 
-if (not $group) {
-    help();
-    osh_exit 'ERR_MISSING_PARAMETER', "Missing mandatory parameter 'group'";
+# Check if port forwarding is enabled in configuration
+$fnret = OVH::Bastion::load_configuration();
+if (!$fnret) {
+    osh_exit 'ERR_CONFIGURATION', "Failed to load configuration";
+}
+my $config = $fnret->value;
+if (!$config->{'portForwardingEnabled'}) {
+    osh_exit 'ERR_FORBIDDEN', "Port forwarding feature is disabled on this bastion";
 }
 
-if (not $ip) {
+if (not $group or not $ip) {
     help();
-    osh_exit 'ERR_MISSING_PARAMETER', "Missing mandatory parameter 'host'";
+    osh_exit 'ERR_MISSING_PARAMETER',
+      "Missing mandatory parameter 'host' or 'group' (or host didn't resolve correctly)";
 }
-
-$fnret = OVH::Bastion::is_valid_group_and_existing(group => $group, groupType => "key");
-$fnret or osh_exit $fnret;
-
-# get returned untainted value
-$group = $fnret->value->{'group'};
-my $shortGroup = $fnret->value->{'shortGroup'};
-
-$fnret = OVH::Bastion::is_group_aclkeeper(account => $self, group => $shortGroup, sudo => 1, silentfail => 1);
-$fnret or osh_exit('ERR_NOT_GROUP_ACLKEEPER', "You must be an aclkeeper of group $shortGroup");
 
 $fnret = OVH::Bastion::Plugin::ACL::check_portforward(
     remoteUser  => $remoteUser,
@@ -84,21 +80,42 @@ $remoteUser  = $fnret->value->{'remoteUser'};
 $sshPort     = $fnret->value->{'sshPort'};
 $forwardPort = $fnret->value->{'forwardPort'};
 
-# Check if port forwarding is enabled in configuration
-$fnret = OVH::Bastion::load_configuration();
-if (!$fnret) {
-    osh_exit 'ERR_CONFIGURATION', "Failed to load configuration";
-}
-my $config = $fnret->value;
-if (!$config->{'portForwardingEnabled'}) {
-    osh_exit 'ERR_FORBIDDEN', "Port forwarding feature is disabled on this bastion";
-}
+$fnret = OVH::Bastion::is_valid_group_and_existing(group => $group, groupType => "key");
+$fnret or osh_exit $fnret;
 
-if ($ttl) {
+# get returned untainted value
+$group = $fnret->value->{'group'};
+my $shortGroup = $fnret->value->{'shortGroup'};
+
+if (defined $ttl) {
     $fnret = OVH::Bastion::is_valid_ttl(ttl => $ttl);
     $fnret or osh_exit $fnret;
     $ttl = $fnret->value->{'seconds'};
 }
+
+if ($forceKey && $forcePassword) {
+    osh_exit 'ERR_INCOMPATIBLE_PARAMETERS', "Can't use --force-key and --force-password at the same time";
+}
+
+if ($forceKey) {
+    $fnret = OVH::Bastion::is_valid_fingerprint(fingerprint => $forceKey);
+    $fnret or osh_exit $fnret;
+    $forceKey = $fnret->value->{'fingerprint'};
+}
+
+if ($forcePassword) {
+    $fnret = OVH::Bastion::is_valid_hash(hash => $forcePassword);
+    $fnret or osh_exit $fnret;
+    $forcePassword = $fnret->value->{'hash'};
+}
+
+#
+# Now do it
+#
+
+$fnret = OVH::Bastion::is_group_aclkeeper(account => $self, group => $shortGroup, sudo => 1, silentfail => 1);
+$fnret or osh_exit('ERR_NOT_GROUP_ACLKEEPER', "You must be an aclkeeper of group $shortGroup");
+
 
 # If no comment was provided but hostname differs from IP, add hostname as comment
 if (!$comment && $host ne $ip) {

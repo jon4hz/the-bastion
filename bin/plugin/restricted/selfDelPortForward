@@ -17,7 +17,6 @@ my $remainingOptions = OVH::Bastion::Plugin::begin(
         "remote-user=s"  => \my $remoteUser,
         "ssh-port=s"     => \my $sshPort,
         "forward-port=s" => \my $forwardPort,
-        "remote-port=s"  => \my $remotePort,    # deprecated, for backward compatibility
     },
     helptext => <<'EOF',
 Remove port forwarding access from your account
@@ -27,7 +26,6 @@ Usage: --osh SCRIPT_NAME --host HOST|IP [OPTIONS]
   --host HOST|IP               Specify the remote host to remove port forwarding access to
   --ssh-port PORT        SSH server port on the remote host [22]
   --forward-port PORT    Port on remote host to forward through the tunnel [*]
-  --remote-port PORT     (deprecated) Same as --forward-port for backward compatibility
   --remote-user USER     Specify the remote user to remove forwarding access for [any user]
 
 This command removes a port forwarding access from your account.
@@ -40,14 +38,19 @@ EOF
 
 my $fnret;
 
+# Check if port forwarding is enabled in configuration
+$fnret = OVH::Bastion::load_configuration();
+if (!$fnret) {
+    osh_exit 'ERR_CONFIGURATION', "Failed to load configuration";
+}
+my $config = $fnret->value;
+if (!$config->{'portForwardingEnabled'}) {
+    osh_exit 'ERR_FORBIDDEN', "Port forwarding feature is disabled on this bastion";
+}
+
 if (!$ip) {
     help();
     osh_exit 'ERR_MISSING_PARAMETER', "Missing mandatory parameter 'host' or didn't resolve correctly";
-}
-
-# Handle backward compatibility: if --remote-port is used, use it as forward-port
-if ($remotePort && !$forwardPort) {
-    $forwardPort = $remotePort;
 }
 
 $fnret = OVH::Bastion::Plugin::ACL::check_portforward(
@@ -63,15 +66,6 @@ $remoteUser  = $fnret->value->{'remoteUser'};
 $sshPort     = $fnret->value->{'sshPort'};
 $forwardPort = $fnret->value->{'forwardPort'};
 
-# Check if port forwarding is enabled in configuration
-$fnret = OVH::Bastion::load_configuration();
-if (!$fnret) {
-    osh_exit 'ERR_CONFIGURATION', "Failed to load configuration";
-}
-my $config = $fnret->value;
-if (!$config->{'portForwardingEnabled'}) {
-    osh_exit 'ERR_FORBIDDEN', "Port forwarding feature is disabled on this bastion";
-}
 
 osh_info "Removing port forward access to $ip:"
   . ($sshPort     || '*') . "->"

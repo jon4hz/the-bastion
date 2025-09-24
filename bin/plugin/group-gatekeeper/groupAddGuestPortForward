@@ -21,8 +21,6 @@ my $remainingOptions = OVH::Bastion::Plugin::begin(
         "forward-port=s"   => \my $forwardPort,
         "ttl=s"            => \my $ttl,
         "comment=s"        => \my $comment,
-        "force-key=s"      => \my $forceKey,
-        "force-password=s" => \my $forcePassword,
     },
     helptext => <<'EOF',
 Add port forwarding access to an account to a group server
@@ -37,8 +35,6 @@ Usage: --osh SCRIPT_NAME --account ACCOUNT --group GROUP --host HOST|IP [OPTIONS
   --remote-user USER       Specify the remote user to add forwarding access for [any user]
   --ttl SECONDS|DURATION   Add a time-to-live to this access, see ``help ttl`` for more information
   --comment "'ANY TEXT'"   Add a comment alongside this access. Quote it twice as shown if you're under a shell.
-  --force-key FINGERPRINT  Only use the key with the specified fingerprint to connect to the server (cf groupListEgressKeys)
-  --force-password HASH    Only use the password with the specified hash to connect to the server (cf groupListPasswords)
 
 This command adds port forwarding access to an account for servers in a group's port forwarding list.
 This access allows the account to create port forwarding tunnels to the specified remote host
@@ -51,6 +47,17 @@ EOF
 );
 
 my $fnret;
+
+# Check if port forwarding is enabled in configuration
+$fnret = OVH::Bastion::load_configuration();
+if (!$fnret) {
+    osh_exit 'ERR_CONFIGURATION', "Failed to load configuration";
+}
+my $config = $fnret->value;
+if (!$config->{'portForwardingEnabled'}) {
+    osh_exit 'ERR_FORBIDDEN', "Port forwarding feature is disabled on this bastion";
+}
+
 
 if (not $account) {
     help();
@@ -67,6 +74,19 @@ if (not $ip) {
     osh_exit 'ERR_MISSING_PARAMETER', "Missing mandatory parameter 'host' or didn't resolve correctly";
 }
 
+$fnret = OVH::Bastion::Plugin::ACL::check_portforward(
+    remoteUser  => $remoteUser,
+    sshPort     => $sshPort,
+    forwardPort => $forwardPort,
+);
+if (not $fnret) {
+    help();
+    osh_exit($fnret);
+}
+$remoteUser  = $fnret->value->{'remoteUser'};
+$sshPort     = $fnret->value->{'sshPort'};
+$forwardPort = $fnret->value->{'forwardPort'};
+
 $fnret = OVH::Bastion::is_bastion_account_valid_and_existing(account => $account);
 $fnret or osh_exit $fnret;
 $account = $fnret->value->{'account'};
@@ -81,49 +101,10 @@ my $shortGroup = $fnret->value->{'shortGroup'};
 $fnret = OVH::Bastion::is_group_gatekeeper(account => $self, group => $shortGroup, sudo => 1);
 $fnret or osh_exit('ERR_NOT_GROUP_GATEKEEPER', "You must be a gatekeeper of group $shortGroup");
 
-$fnret = OVH::Bastion::Plugin::ACL::check_portforward(
-    remoteUser  => $remoteUser,
-    sshPort     => $sshPort,
-    forwardPort => $forwardPort,
-);
-if (not $fnret) {
-    help();
-    osh_exit($fnret);
-}
-$remoteUser  = $fnret->value->{'remoteUser'};
-$sshPort     = $fnret->value->{'sshPort'};
-$forwardPort = $fnret->value->{'forwardPort'};
-
-# Check if port forwarding is enabled in configuration
-$fnret = OVH::Bastion::load_configuration();
-if (!$fnret) {
-    osh_exit 'ERR_CONFIGURATION', "Failed to load configuration";
-}
-my $config = $fnret->value;
-if (!$config->{'portForwardingEnabled'}) {
-    osh_exit 'ERR_FORBIDDEN', "Port forwarding feature is disabled on this bastion";
-}
-
-if ($ttl) {
+if (defined $ttl) {
     $fnret = OVH::Bastion::is_valid_ttl(ttl => $ttl);
     $fnret or osh_exit $fnret;
     $ttl = $fnret->value->{'seconds'};
-}
-
-if ($forceKey && $forcePassword) {
-    osh_exit 'ERR_INCOMPATIBLE_PARAMETERS', "You can't use both --force-key and --force-password at the same time";
-}
-
-if ($forceKey) {
-    $fnret = OVH::Bastion::is_valid_fingerprint(fingerprint => $forceKey);
-    $fnret or osh_exit $fnret;
-    $forceKey = $fnret->value->{'fingerprint'};
-}
-
-if ($forcePassword) {
-    $fnret = OVH::Bastion::is_valid_hash(hash => $forcePassword);
-    $fnret or osh_exit $fnret;
-    $forcePassword = $fnret->value->{'hash'};
 }
 
 # if no comment is specified, but we're adding the server by hostname,
@@ -149,7 +130,5 @@ push @command, '--ssh-port',       $sshPort       if $sshPort;
 push @command, '--forward-port',   $forwardPort   if $forwardPort;
 push @command, '--ttl',            $ttl           if $ttl;
 push @command, '--comment',        $comment       if $comment;
-push @command, '--force-key',      $forceKey      if $forceKey;
-push @command, '--force-password', $forcePassword if $forcePassword;
 
 osh_exit OVH::Bastion::helper(cmd => \@command);
