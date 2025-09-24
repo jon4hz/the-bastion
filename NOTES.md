@@ -9,6 +9,7 @@
 - aclkeepers have permission to manages port forwards of groups
 - every forwarding rule gets a random local port assigned, an sshd config is generated for every user, 
   so that they can only access
+- sync sshd forwarding configs to slaves and reload remote sshd server
 
 # the bad
 - only local forwarding is possible (is that really bad?)
@@ -16,26 +17,24 @@
 - no unit tests yet
 - tested only on debian 13
 - if server gets removed, associated portforwards still persist. Should they get removed automatically?
-- when allocating a local port, we check only on the master if that port is free. We also have no guarantee that this 
-  port doesn't get allocated by another process. However, I have no idea how to avoid this and I think this is an
-  acceptable risk.
+- when allocating a local port, we check only on the master if that port is free,  but the port will be used by the slaves as well.
+  We also have no guarantee that this port doesn't get allocated by another process. However, I have no idea how to avoid this and 
+  I think this is an acceptable risk.
 - I'm not sure how to log connections if the client uses the `-N` option from ssh
 - the portforward parameters are logged in the comment field for now
 - this is currently only supported on servers using systemd
 
 # the list of things that arent done yet
 - ttl not tested yet
-- sync sshd forwarding configs and reload remote sshd server
 - close connections if rule gets deleted or user gets removed from group
 - remote-user param could probably be removed, since we should use the existing allowdeny functions to check access for port forwardings
 - Guest access not tested yet
 - allow deletion by id to make commands simpler
 - not tested --force-key and --force-password options
-- not tested grant role thingy yet
-
+- test * user and * port options
+- Actually implement the port forward limits per user & group
 
 # The uncertain
-- should we automatically add the `-N` parameter when starting a port forwarding session?
 - the remote host from the `-L` flag is currently always the ip of the remote host. Should we allow 127.0.0.1 as well? 
   Or even enforce it?
 - do we have to make changes to the auditor function?
