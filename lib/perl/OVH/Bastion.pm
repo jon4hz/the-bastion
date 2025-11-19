@@ -816,6 +816,7 @@ sub machine_display {
     my $proxyPort  = $params{'proxyPort'};
     my $proxyUser  = $params{'proxyUser'};
     my $remotePort = $params{'remotePort'};
+    my $localPort =  $params{'localPort'};
 
     my $machine = (index($ip, ':') >= 0 ? "[$ip]" : $ip);
     $machine .= ":$port"              if $port;
@@ -828,8 +829,10 @@ sub machine_display {
         $machine = "$machine via $proxy";
     }
 
-    if ($remotePort) {
-        $machine .= " (remote port forwarding: $remotePort)";
+    if ($remotePort && !$localPort) {
+        $machine .= " (port forwarding: $remotePort)";
+    } elsif ($localPort) {
+        $machine .= " (port forwarding: $localPort->$remotePort)";
     }
 
     return R('OK', value => $machine);
